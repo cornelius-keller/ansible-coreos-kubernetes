@@ -1,3 +1,6 @@
 [submodule "library"]
 	path = library
 	url = https://github.com/cornelius-keller/ansible-ovh
+[submodule "roles/ansible-coreos-bootstrap"]
+	path = roles/ansible-coreos-bootstrap
+	url = https://github.com/sigma/ansible-coreos-bootstrap.git
