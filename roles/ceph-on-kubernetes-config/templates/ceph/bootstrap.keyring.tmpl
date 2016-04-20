@@ -1,0 +1,3 @@
+[client.bootstrap-{{ item }}]
+  key = {{ ceph_key }}
+  caps mon = "allow profile bootstrap-{{ item }}"

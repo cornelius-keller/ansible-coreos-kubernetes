@@ -1,0 +1,3 @@
+- name: request safe reboot
+  command: /opt/bin/update_needed.sh
+  sudo: yes

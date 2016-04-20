@@ -1,0 +1,11 @@
+---
+- name: download kubectl
+  local_action:
+     module: get_url
+     url: "https://storage.googleapis.com/kubernetes-release/release/v{{ kubernetes_version }}/bin/linux/amd64/kubectl"
+     dest: ~/bin/
+     sha256sum: "{{ kubectl_checksum }}"
+     mode: 0770
+  run_once: yes
+
+

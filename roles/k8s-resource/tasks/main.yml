@@ -1,0 +1,40 @@
+---
+- name: check if resource is already exists
+  command: kubectl get {{ k8s_resource_kind }} --namespace={{ k8s_resource_namespace|default("default") }} --output=json --context={{ kube_cluster_name }}
+  register: k8s_resource_kubectl_command
+  changed_when: false
+  delegate_to: localhost
+  connection: local
+  run_once: true
+
+- name: debug
+  set_fact:
+     k8s_resource_kubectl: "{{ k8s_resource_kubectl_command.stdout|from_json }}"
+  delegate_to: localhost
+  connection: local
+  run_once: true
+
+- name: set kubctlexists to default to false
+  set_fact:
+      k8s_resource_exists: false
+  changed_when: false
+  delegate_to: localhost
+  connection: local
+  run_once: true
+
+- name: check if is already there
+  set_fact:
+      k8s_resource_exists: true
+  when: item['metadata']['name'] == k8s_resource_name
+  with_items: k8s_resource_kubectl['items']
+  changed_when: false
+  delegate_to: localhost
+  connection: local
+  run_once: true
+
+- name: create resource
+  command: kubectl create -f {{ k8s_resource_file }} --namespace={{ k8s_resource_namespace|default("default") }} --context={{ kube_cluster_name }}
+  when: k8s_resource_exists == false
+  delegate_to: localhost
+  connection: local
+  run_once: true

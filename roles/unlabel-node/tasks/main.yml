@@ -1,0 +1,45 @@
+---
+- name: get list of nodes and lables
+  command: kubectl get nodes --output=json
+  changed_when: false
+  delegate_to: localhost
+  connection: local
+  run_once: true
+  register: label_kubectl_command
+
+#- name: debug
+#  set_fact:
+#      label_kaubectl_output: "{{ label_kubectl_command.stdout|from_json }}"
+#  delegate_to: localhost
+#  connection: local
+#  run_once: true
+
+#- name: debug
+#  debug:
+#      var: item #['metadata'] #['name']
+#  with_items: label_kaubectl_output['items']
+
+- name: check if dns-addon is already installed
+  set_fact:
+      node_to_label:  "{{ item }}"
+  when: item['metadata']['name'] == label_node
+  with_items: label_kaubectl_output['items']
+  changed_when: false
+  delegate_to: localhost
+  connection: local
+  run_once: true
+
+- name: assert that the node we need to label exist.
+  assert:
+    that: node_to_label is defined
+
+#- name: debug node to label
+#  debug:
+#    var: node_to_label['metadata']['labels']
+
+
+- name: check if dns-addon is already installed
+  command: kubectl label nodes {{ label_node }} {{ label_key }}-
+  delegate_to: localhost
+  connection: local
+  when: label_key in node_to_label['metadata']['labels']

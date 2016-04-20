@@ -1,0 +1,40 @@
+---
+- name: check if dns-addon is already installed
+  command: kubectl get namespaces --output=json --context={{ kube_cluster_name }}
+  register: system_namespace_kubectl_command
+  changed_when: false
+  delegate_to: localhost
+  connection: local
+  run_once: true
+
+- name: debug
+  set_fact:
+     system_namespace_kubectl: "{{ system_namespace_kubectl_command.stdout|from_json }}"
+  delegate_to: localhost
+  connection: local
+  run_once: true
+
+- name: set kubctlexists to default to false
+  set_fact:
+      k8s_system_namespace: false
+  changed_when: false
+  delegate_to: localhost
+  connection: local
+  run_once: true
+
+- name: check if dns-addon is already installed
+  set_fact:
+      k8s_system_namespace: true
+  when: item['metadata']['name'] == 'kube-system'
+  with_items: system_namespace_kubectl['items']
+  changed_when: false
+  delegate_to: localhost
+  connection: local
+  run_once: true
+
+- name: create dns service
+  command: kubectl create -f {{ playbook_dir }}/roles/k8s-kubesystem-namespace/files/kube-system-namespace.yml --context={{ kube_cluster_name }}
+  when: k8s_system_namespace == false
+  delegate_to: localhost
+  connection: local
+  run_once: true

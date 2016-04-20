@@ -1,0 +1,20 @@
+[req]
+req_extensions = v3_req
+distinguished_name = req_distinguished_name
+[req_distinguished_name]
+[ v3_req ]
+basicConstraints = CA:FALSE
+keyUsage = nonRepudiation, digitalSignature, keyEncipherment
+subjectAltName = @alt_names
+[alt_names]
+DNS.1 = kubernetes
+DNS.2 = kubernetes.default
+DNS.3 = kubernetes.default.svc
+DNS.4 = localhost
+{% if kube_master_dns_name is defined %}DNS.5 = {{ kube_master_dns_name }}{% endif %}
+
+IP.1 = {{ k8s_service_ip }}
+IP.2 = 127.0.0.1
+{% for host in groups['kubernetes'] %}
+IP.{{ loop.index + 2 }} = {{ host }}
+{% endfor %}

@@ -1,0 +1,38 @@
+---
+- name: copy cloud confgi
+  template: src=cloud_config_install.tmpl dest=/tmp/cloud-config.yaml
+
+
+- name: install coreos
+  shell: |
+     wget https://raw.githubusercontent.com/coreos/init/master/bin/coreos-install -P /tmp
+     chmod a+x /tmp/coreos-install
+     /tmp/coreos-install -d /dev/sda -C stable -c /tmp/cloud-config.yaml
+
+     if [ $? -ne 0 ]; then
+         echo "retry"
+         /tmp/coreos-install -d /dev/sda -C stable -c /tmp/cloud-config.yaml
+     fi
+
+- name: reboot server
+  command: reboot
+  async: 0
+  poll: 0
+  ignore_errors: true
+
+- name: remove server from local known_hosts file
+  local_action: command  /usr/bin/ssh-keygen -R {{ inventory_hostname }}
+  ignore_errors: true
+
+
+- name: pause for a while for the reboot to kick in
+  pause: seconds=15
+
+- name: waiting for server to come back
+  local_action:
+    module: wait_for
+      host={{ inventory_hostname }}
+      port=22
+      delay=1
+      timeout=200
+

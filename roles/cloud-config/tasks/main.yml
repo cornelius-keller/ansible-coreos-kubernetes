@@ -1,0 +1,28 @@
+---
+- name: copy cloud config
+  template: src=cloud_config.tmpl dest=/var/lib/coreos-install/user_data
+  sudo: yes
+
+- name: stop etcd.service
+  command: systemctl stop etcd.service
+  ignore_errors: true
+  sudo: yes
+  when: clear_etcd_data
+
+- name: stop etcd2.service
+  command: systemctl stop etcd2.service
+  ignore_errors: true
+  sudo: yes
+  when: clear_etcd_data
+
+
+- name: cleanup  /var/lib/etcd/*
+  command: rm -rf  /var/lib/etcd/*
+  sudo: yes
+  when: clear_etcd_data
+
+- name: cleanup  /var/lib/etcd2/*
+  command: rm -rf  /var/lib/etcd2/*
+  sudo: yes
+  when: clear_etcd_data
+

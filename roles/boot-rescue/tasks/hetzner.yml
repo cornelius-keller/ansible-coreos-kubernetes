@@ -1,0 +1,58 @@
+---
+- name: check rescue mode
+  uri:
+    url: https://robot-ws.your-server.de/boot/{{ inventory_hostname }}/rescue
+    method: GET
+    user: "{{ hetzner_webservice_username }}"
+    password: "{{ hetzner_webservice_password }}"
+    force_basic_auth: yes
+    status_code: 200
+  register: rescue
+
+- name: activate rescue mode
+  when:  rescue.json.rescue.active == false
+  uri:
+    url: https://robot-ws.your-server.de/boot/{{ inventory_hostname }}/rescue
+    method: POST
+    user: "{{ hetzner_webservice_username }}"
+    password: "{{ hetzner_webservice_password }}"
+    force_basic_auth: yes
+    body: "os=linux&arch=64&authorized_key={{ rescue_authorized_key }}"
+    status_code: 200
+    HEADER_Content-Type: "application/x-www-form-urlencoded"
+  register: activated
+
+#- debug: var=activated
+
+- name: Execute hardware reset
+  uri:
+    url: https://robot-ws.your-server.de/reset/{{ inventory_hostname }}
+    method: POST
+    user: "{{ hetzner_webservice_username }}"
+    password: "{{ hetzner_webservice_password }}"
+    force_basic_auth: yes
+    body: "type=hw"
+    status_code: 200
+    HEADER_Content-Type: "application/x-www-form-urlencoded"
+  register: reset
+
+- name: remove server from local known_hosts file
+  local_action: shell ssh-keygen -R {{ inventory_hostname }}
+  ignore_errors: true
+
+- name: waiting for server to go down
+  local_action: 
+      module: wait_for
+      host: "{{ inventory_hostname }}"
+      port: 22
+      delay: 1
+      timeout: 120
+      state: stopped
+
+- name: waiting for server to come back
+  local_action: 
+      module: wait_for
+      host: "{{ inventory_hostname }}"
+      port: 22
+      delay: 1
+      timeout: 120

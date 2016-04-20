@@ -1,0 +1,77 @@
+---
+# https://coreos.com/kubernetes/docs/latest/openssl.html
+- name: create certificate directory
+  local_action: file path={{ playbook_dir }}/{{ kube_cluster_name}}-kubernetes-ca state=directory
+
+- name: create ca 
+  shell: |
+      cd {{ playbook_dir }}/{{ kube_cluster_name}}-kubernetes-ca
+      openssl genrsa -out ca-key.pem 2048
+      openssl req -x509 -new -nodes -key ca-key.pem -days 10000 -out ca.pem -subj "/CN=kube-ca"
+  args:
+      creates: "{{ playbook_dir }}/{{ kube_cluster_name}}-kubernetes-ca/ca-key.pem"
+  delegate_to: localhost
+  connection: local
+
+- name: template openssl.conf
+  local_action: template src=openssl.cnf.tmpl dest={{ playbook_dir }}/{{ kube_cluster_name}}-kubernetes-ca/openssl.cnf
+  register: openssl_conf
+
+- name: template openssl_worker.conf
+  local_action: template src=openssl_worker.cnf.tmpl dest={{ playbook_dir }}/{{ kube_cluster_name}}-kubernetes-ca/openssl_worker.cnf
+  register: worker_conf
+
+- name: Generate the API Server Keypair
+  shell: |
+    cd {{ playbook_dir }}/{{ kube_cluster_name}}-kubernetes-ca
+    openssl genrsa -out apiserver-key.pem 2048
+    openssl req -new -key apiserver-key.pem -out apiserver.csr -subj "/CN=kube-apiserver" -config openssl.cnf
+    openssl x509 -req -in apiserver.csr -CA ca.pem -CAkey ca-key.pem -CAcreateserial -out apiserver.pem -days 365 -extensions v3_req -extfile openssl.cnf
+  args:
+      creates: "{{ playbook_dir }}/{{ kube_cluster_name}}-kubernetes-ca/apiserver.pem"
+  when: 
+  delegate_to: localhost
+  connection: local
+
+- name: Generate the Kubernetes Worker Keypair
+  shell: |
+    cd {{ playbook_dir }}/{{ kube_cluster_name}}-kubernetes-ca
+    openssl genrsa -out worker-key.pem 2048
+    openssl req -new -key worker-key.pem -out worker.csr -subj "/CN=kube-worker" -config openssl_worker.cnf
+    openssl x509 -req -in worker.csr -CA ca.pem -CAkey ca-key.pem -CAcreateserial -out worker.pem -days 365  -extensions v3_req -extfile openssl_worker.cnf
+  args:
+      creates: "{{ playbook_dir }}/{{ kube_cluster_name}}-kubernetes-ca/worker.pem"
+  delegate_to: localhost
+  connection: local
+
+- name: Generate the Cluster Administrator Keypair
+  shell: |
+    cd {{ playbook_dir }}/{{ kube_cluster_name}}-kubernetes-ca
+    openssl genrsa -out admin-key.pem 2048
+    openssl req -new -key admin-key.pem -out admin.csr -subj "/CN=kube-admin"
+    openssl x509 -req -in admin.csr -CA ca.pem -CAkey ca-key.pem -CAcreateserial -out admin.pem -days 365
+  args:
+      creates: "{{ playbook_dir }}/{{ kube_cluster_name}}-kubernetes-ca/admin.pem"
+  delegate_to: localhost
+  connection: local
+
+- name: register kube ca
+  set_fact:
+    kube_ca: "{{  lookup('file', playbook_dir + '/' + kube_cluster_name + '-kubernetes-ca/ca.pem' ) }}"
+    kube_ca_key: "{{  lookup('file', playbook_dir + '/' + kube_cluster_name + '-kubernetes-ca/ca-key.pem' ) }}"
+    kube_apiserver_pem: "{{  lookup('file', playbook_dir + '/' + kube_cluster_name + '-kubernetes-ca/apiserver.pem' ) }}"
+    kube_apiserver_key: "{{  lookup('file', playbook_dir + '/' + kube_cluster_name + '-kubernetes-ca/apiserver-key.pem' ) }}"
+    kube_worker_key: "{{  lookup('file', playbook_dir + '/' + kube_cluster_name + '-kubernetes-ca/worker-key.pem' ) }}"
+    kube_worker_pem: "{{  lookup('file', playbook_dir + '/' + kube_cluster_name + '-kubernetes-ca/worker.pem' ) }}"
+    kube_admin_key: "{{  lookup('file', playbook_dir + '/' + kube_cluster_name + '-kubernetes-ca/admin.pem' ) }}"
+
+- name: debug
+  debug: var={{ item }}
+  with_items:
+    - kube_ca
+    - kube_ca_key
+    - kube_apiserver_key
+    - kube_apiserver_pem
+    - kube_worker_key
+    - kube_admin_key
+   

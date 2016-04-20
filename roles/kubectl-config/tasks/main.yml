@@ -1,0 +1,17 @@
+---
+- name: copy kubernetes ca
+  local_action:
+    module: copy
+    src: "{{ playbook_dir }}/{{ kube_cluster_name }}-kubernetes-ca/"
+    dest:  "{{ lookup('env','HOME') }}/.kube/{{ kube_cluster_name }}-kubernetes-ca/"
+  run_once: true
+
+- name: configure kubectl
+  shell: |
+     {{ lookup('env','HOME') }}/bin/kubectl config set-cluster {{ kube_cluster_name }} --server=https://{{ kube_master_dns_name|default(kube_master_ip)}}:6443 --certificate-authority={{ lookup('env','HOME') }}/.kube/{{ kube_cluster_name }}-kubernetes-ca/ca.pem
+     {{ lookup('env','HOME') }}/bin/kubectl config set-credentials {{ kube_cluster_name }}-admin --certificate-authority={{ lookup('env','HOME') }}/.kube/{{ kube_cluster_name }}-kubernetes-ca/ca.pem --client-key={{ lookup('env','HOME') }}/.kube/{{ kube_cluster_name }}-kubernetes-ca/admin-key.pem --client-certificate={{ lookup('env','HOME') }}/.kube/{{ kube_cluster_name }}-kubernetes-ca/admin.pem
+     {{ lookup('env','HOME') }}/bin/kubectl config set-context {{ kube_cluster_name }} --cluster={{ kube_cluster_name }} --user={{ kube_cluster_name }}-admin
+     {{ lookup('env','HOME') }}/bin/kubectl config use-context {{ kube_cluster_name }}
+  run_once: true
+  delegate_to: 127.0.0.1
+  connection: local

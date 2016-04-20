@@ -1,0 +1,53 @@
+---
+- name:  set rescue boot
+  ovh:
+    method: put
+    endpoint: kimsufi-eu
+    application_key: "{{ kimsufi_application_key }}"
+    application_secret: "{{ kimsufi_application_secret }}"
+    consumer_key: "{{ kimsufi_consumer_key }}"
+    uri: /dedicated/server/{{ server_name }}
+    args:
+      bootId: 22
+
+- name:  reboot
+  ovh:
+    method: post
+    endpoint: kimsufi-eu
+    application_key: "{{ kimsufi_application_key }}"
+    application_secret: "{{ kimsufi_application_secret }}"
+    consumer_key: "{{ kimsufi_consumer_key }}"
+    uri: /dedicated/server/{{ server_name }}/reboot
+
+- name: remove server from local known_hosts file
+  local_action: shell ssh-keygen -R {{ inventory_hostname }}
+  ignore_errors: true
+
+
+- name: waiting for server to go down
+  local_action: 
+    module: wait_for 
+      host={{ inventory_hostname }} 
+      port=22 
+      delay=1 
+      timeout=120
+      state=absent
+- name: waiting for server to come back
+  local_action: 
+    module: wait_for 
+      host={{ inventory_hostname }} 
+      port=22 
+      delay=1 
+      timeout=120
+      search_regex=OpenSSH
+
+- name:  set boot back to harddrive
+  ovh:
+    method: put
+    endpoint: kimsufi-eu
+    application_key: "{{ kimsufi_application_key }}"
+    application_secret: "{{ kimsufi_application_secret }}"
+    consumer_key: "{{ kimsufi_consumer_key }}"
+    uri: /dedicated/server/{{ server_name }}
+    args:
+      bootId: 1

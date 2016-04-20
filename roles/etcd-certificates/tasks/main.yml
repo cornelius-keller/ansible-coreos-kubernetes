@@ -1,0 +1,57 @@
+---
+
+- name: crate ca home
+  local_action: file path={{ playbook_dir }}/{{ kube_cluster_name}}-etcd-ca-keys state=directory
+
+- name: init ca 
+  shell: |
+      cd {{ playbook_dir }}/{{ kube_cluster_name}}-etcd-ca-keys/
+      etcd-ca init --passphrase=""
+  args:
+      creates: "{{ playbook_dir }}/{{ kube_cluster_name}}-etcd-ca-keys/.etcd-ca/ca.crt"
+  delegate_to: localhost
+  connection: local
+
+- name: create csr for host
+  shell: |
+      cd {{ playbook_dir }}/{{ kube_cluster_name}}-etcd-ca-keys/
+      etcd-ca  new-cert --passphrase="" -ip {{ inventory_hostname }} {{ coreos_hostname }} 
+  args:
+      creates:  "{{ playbook_dir }}/{{ kube_cluster_name}}-etcd-ca-keys/.etcd-ca/{{ coreos_hostname }}.host.csr"
+  delegate_to: localhost
+  connection: local
+
+- name: sign csr for host
+  shell: |
+      cd {{ playbook_dir }}/{{ kube_cluster_name}}-etcd-ca-keys/
+      etcd-ca  sign --passphrase="" {{ coreos_hostname }} 
+  args:
+      creates:  "{{ playbook_dir }}/{{ kube_cluster_name}}-etcd-ca-keys/.etcd-ca/{{ coreos_hostname }}.host.crt"
+  delegate_to: localhost
+  connection: local
+
+- name: chain certificate
+  shell: |
+      cd {{ playbook_dir }}/{{ kube_cluster_name}}-etcd-ca-keys/
+      etcd-ca  chain {{ coreos_hostname }} > {{ playbook_dir }}/{{ kube_cluster_name}}-etcd-ca-keys/.etcd-ca/{{ coreos_hostname }}.chain
+  args:
+      creates:  "{{ playbook_dir }}/{{ kube_cluster_name}}-etcd-ca-keys/.etcd-ca/{{ coreos_hostname }}.host.chain"
+  delegate_to: localhost
+  connection: local
+
+- name: chain certificate
+  shell: |
+      cd {{ playbook_dir }}/{{ kube_cluster_name}}-etcd-ca-keys/
+      etcd-ca  export --insecure --passphrase="" {{ coreos_hostname }} > {{ playbook_dir }}/{{ kube_cluster_name}}-etcd-ca-keys/.etcd-ca/{{ coreos_hostname }}.tar
+      tar  -C {{ playbook_dir }}/{{ kube_cluster_name}}-etcd-ca-keys/.etcd-ca/ -xf {{ playbook_dir }}/{{ kube_cluster_name}}-etcd-ca-keys/.etcd-ca/{{ coreos_hostname }}.tar {{ coreos_hostname }}.key.insecure
+  args:
+      creates:  "{{ playbook_dir }}/{{ kube_cluster_name}}-etcd-ca-keys/.etcd-ca/{{ coreos_hostname }}.key.insecure"
+  delegate_to: localhost
+  connection: local
+
+- name: set_ca_fcts
+  set_fact:
+      etcd_ca_certificate:  "{{ lookup('file', playbook_dir + '/' + kube_cluster_name +  '-etcd-ca-keys/.etcd-ca/' + coreos_hostname  + '.chain') }}"
+      etcd_cert:    "{{ lookup('file', playbook_dir + '/' + kube_cluster_name +  '-etcd-ca-keys/.etcd-ca/' + coreos_hostname + '.host.crt') }}"
+      etcd_key: "{{ lookup('file', playbook_dir + '/' + kube_cluster_name +  '-etcd-ca-keys/.etcd-ca/' + coreos_hostname + '.key.insecure') }}"
+

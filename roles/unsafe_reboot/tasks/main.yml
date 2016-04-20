@@ -1,0 +1,17 @@
+- name: shutdown
+  command: shutdown -r -t +1
+  sudo: yes
+
+- name: wait a minute for reboot
+  pause: seconds=75
+
+- name: waiting for server to come back
+  local_action: 
+    module: wait_for 
+      host={{ inventory_hostname }} 
+      port=22 
+      delay=1 
+      timeout=60
+- name: wait some time to let the server rejoin the etcd cluster
+  pause: seconds={{ unsafe_reboot_dealay|default("300") }}
+

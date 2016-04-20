@@ -1,0 +1,81 @@
+---
+- name: check if dns-addon is already installed
+  command: kubectl get services --namespace=kube-system --output=json --context={{ kube_cluster_name }}
+  register: dns_service_kubectl_command
+  changed_when: false
+  delegate_to: localhost
+  connection: local
+  run_once: true
+
+- name: debug
+  set_fact:
+      dns_service_kubectl: "{{ dns_service_kubectl_command.stdout|from_json }}"
+  delegate_to: localhost
+  connection: local
+  run_once: true
+
+- name: set kubctlexists to default to false
+  set_fact:
+      k8s_dns_service: false
+  changed_when: false
+  delegate_to: localhost
+  connection: local
+  run_once: true
+
+- name: check if dns-addon is already installed
+  set_fact:
+      k8s_dns_service: true
+  when: item['metadata']['name'] == 'kube-dns'
+  with_items: dns_service_kubectl['items']
+  changed_when: false
+  delegate_to: localhost
+  connection: local
+  run_once: true
+
+- name: create tempfile
+  command: mktemp
+  register: tmp_file_name
+  when: k8s_dns_service == false
+  delegate_to: localhost
+  connection: local
+  run_once: true
+
+- name: template addon k8s service efinition
+  template: src=dns-addon.yml dest={{ tmp_file_name.stdout }}
+  when: k8s_dns_service == false
+  delegate_to: localhost
+  connection: local
+  run_once: true
+
+- name: create dns service
+  command: kubectl create -f {{ tmp_file_name.stdout }} --context={{ kube_cluster_name }}
+  when: k8s_dns_service == false
+  delegate_to: localhost
+  connection: local
+  run_once: true
+
+- name: cleanup tmp file
+  file: path={{ tmp_file_name.stdout }} state=absent 
+  when: k8s_dns_service == false
+  connection: local
+  run_once: true
+
+- name: wait for k8s dns service to be ready 
+  delegate_to: localhost
+  connection: local
+  run_once: true
+  shell: |
+      #!/bin/bash
+      n=0
+      until [ $n -ge 300 ]
+      do
+         [ $(kubectl --namespace=kube-system get pods  | grep kube-dns | grep Running | wc -l) -eq 3 ] && break  # substitute your command here
+         n=$[$n+1]
+         echo "."
+         sleep 1
+      done
+      [ $(kubectl --namespace=kube-system get pods  | grep kube-dns | grep Running | wc -l) -eq 3 ]
+  args:
+    executable: /bin/bash
+
+

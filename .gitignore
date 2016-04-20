@@ -1,0 +1,4 @@
+*-etcd-ca-keys/
+*-kubernetes-ca/
+*-ceph/
+*.ini

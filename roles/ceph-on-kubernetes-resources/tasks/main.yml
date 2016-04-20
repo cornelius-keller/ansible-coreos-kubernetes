@@ -1,0 +1,6 @@
+---
+- name: create ceph osd dir
+  file: 
+    path: "{{ ceph_osd_dir }}"
+    state: directory
+  sudo: yes

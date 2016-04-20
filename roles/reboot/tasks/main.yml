@@ -1,0 +1,6 @@
+- name: shutdown
+  command: shutdown -r -t +1
+  sudo: yes
+
+- name: wait a minute for reboot
+  pause: seconds=75

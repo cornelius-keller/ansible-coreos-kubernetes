@@ -1,0 +1,7 @@
+---
+- include: ovh.yml
+  when: baremetal_provider == 'ovh'
+
+- include: hetzner.yml
+  when: baremetal_provider == 'hetzner'
+
