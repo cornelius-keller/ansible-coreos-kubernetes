@@ -1,0 +1,720 @@
+#cloud-config
+
+hostname: {{ coreos_hostname }}
+ssh_authorized_keys:
+  {% for key in coreos_public_keys %}
+  - {{ key }}
+  {% endfor %}
+
+write_files:
+  {%if inventory_hostname in groups['kubernetes-master'] or  inventory_hostname in groups['kubernetes-node'] %}
+
+  - path: /etc/kubernetes/ssl/ca.pem
+    content: |
+      {{ kube_ca|indent(width=6) }}
+
+  {% endif %}
+  {%if inventory_hostname in groups['kubernetes-master'] %}
+
+
+  - path: /etc/kubernetes/ssl/ca-key.pem
+    content: |
+      {{ kube_ca_key|indent(width=6) }}
+
+  - path: /etc/conf.d/nfs
+    permissions: '0644'
+    content: |
+      OPTS_RPC_MOUNTD=""
+  - path: /etc/kubernetes/ssl/apiserver.pem
+    content: |
+      {{ kube_apiserver_pem|indent(width=6) }}
+  - path: /etc/kubernetes/ssl/apiserver-key.pem
+    content: |
+      {{ kube_apiserver_key|indent(width=6) }}
+  {% endif %}
+
+  {%if inventory_hostname in groups['kubernetes-node'] or inventory_hostname in groups['kubernetes-master'] %}
+
+
+  - path: /etc/kubernetes/worker-kubeconfig.yaml
+    content: |
+      apiVersion: v1
+      kind: Config
+      clusters:
+      - name: local
+        cluster:
+          certificate-authority: /etc/kubernetes/ssl/ca.pem
+      users:
+      - name: kubelet
+        user:
+          client-certificate: /etc/kubernetes/ssl/worker.pem
+          client-key: /etc/kubernetes/ssl/worker-key.pem
+      contexts:
+      - context:
+          cluster: local
+          user: kubelet
+        name: kubelet-context
+      current-context: kubelet-context
+
+  - path: /etc/kubernetes/ssl/worker.pem
+    content: |
+      {{ kube_worker_pem|indent(width=6) }}
+  - path: /etc/kubernetes/ssl/worker-key.pem
+    content: |
+      {{ kube_worker_key|indent(width=6) }}
+  {% endif %}
+
+  - path: /opt/bin/update-window.sh
+    permissions: 0755
+    owner: root
+    content: |
+      #!/bin/bash
+      # sleep a rondom delay between 0 and five minutes to prevent every machine trying to get the lock at the same time
+      delay=$(/usr/bin/expr $RANDOM % 300 )
+      sleep $delay
+      
+      if locksmithctl lock || locksmithctl status | grep `cat /etc/machine-id`; then
+        rebootflag='NEED_REBOOT'
+        if update_engine_client -status | grep $rebootflag || etcdctl get  /needsreboot/$( cat /etc/machine-id); then
+          if /opt/bin/ceph  health | grep HEALTH_OK && /opt/bin/ceph -s | grep "3 mons"; then
+            etcdctl rm /needsreboot/$( cat /etc/machine-id) || true;
+            echo "all checks for update window passed; rebooting now";
+            reboot;
+          else
+            echo "reboot needed but ceph is not health; delay reboot"
+            locksmithctl unlock;
+          fi
+        else
+            echo "no reboot needed, unlock"
+            locksmithctl unlock;
+        fi
+      fi
+  - path: /opt/bin/update_needed.sh
+    permissions: 0755
+    owner: root
+    content: |
+      #!/bin/bash
+      . /etc/environment
+      etcdctl set /needsreboot/$( cat /etc/machine-id) $( cat /etc/machine-id)
+
+  - path: /etc/systemd/resolved.conf
+    content: |
+      [Resolve]
+      DNS={{ k8s_dns_service_ip }}
+
+  - path: /opt/bin/waiter.sh
+    owner: root
+    content: |
+      #! /usr/bin/bash
+      until curl --cacert /home/core/ca.crt --cert /home/core/key.crt --key /home/core/key.key https://{{ inventory_hostname }}:4001/v2/machines -v; do sleep 2; done
+
+
+  - path: /etc/etcd-client.config.json
+    permissions: '0644'
+    content: |
+       { 
+         "cluster": {
+         "machines": [ "https://{{ inventory_hostname }}:2379" ] },
+         "config": { 
+            "certFile": "/home/core/key.crt",
+            "keyFile": "/home/core/key.key",
+            "caCertFiles": [ "/home/core/ca.crt" ],
+         "timeout": 5000000000,
+         "consistency": "WEAK"
+         } 
+       }
+
+
+  - path: /opt/bin/wupiao
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      # [w]ait [u]ntil [p]ort [i]s [a]ctually [o]pen
+      [ -n "$1" ] && \
+        until curl -o /dev/null -sIf http://${1}; do \
+          sleep 1 && echo .;
+        done;
+      exit $?
+  - path: /srv/tinc_initial_config.sh
+    permissions: 0774
+    owner: root
+    content: |
+      #!/bin/sh
+      export DOCKER_HOST=unix:///var/run/early-docker.sock
+      . /etc/tinc-env
+      for host in `etcdctl ls /services/tinc/ | sed -e 's/\/services\/tinc\///'`; do
+        if [ "$TINC_HOSTNAME" != "$host" ]; then
+          docker run --rm --volume /srv/tinc:/etc/tinc  jenserat/tinc add ConnectTo = $host
+          etcdctl get /services/tinc/$host | sed -e 's/\"//g' > /srv/tinc/hosts/$host
+        fi
+      done
+      docker exec tinc /usr/sbin/tinc reload
+  - path: /etc/environment
+    permissions: 0774
+    owner: root
+    content: |
+      COREOS_PUBLIC_IPV4={{ inventory_hostname }}
+      #COREOS_PRIVATE_IPV4=172.17.8.101
+      ETCDCTL_CERT_FILE=/home/core/key.crt
+      ETCDCTL_CA_FILE=/home/core/ca.crt
+      ETCDCTL_PEERS=https://{{ inventory_hostname }}:4001
+      ETCDCTL_KEY_FILE=/home/core/key.key
+      LOCKSMITHCTL_ETCD_CERTFILE=/home/core/key.crt
+      LOCKSMITHCTL_ETCD_CAFILE=/home/core/ca.crt
+      LOCKSMITHCTL_ENDPOINT=https://{{ inventory_hostname }}:4001
+      LOCKSMITHCTL_ETCD_KEYFILE=/home/core/key.key
+
+  - path: /etc/flannel/options.env
+    permissions: 0774
+    owner: root
+    content: |
+      FLANNELD_ETCD_ENDPOINTS=https://{{ inventory_hostname }}:4001
+      FLANNELD_ETCD_KEYFILE=/etc/ssl/etcd/key.key
+      FLANNELD_ETCD_CERTFILE=/etc/ssl/etcd/key.crt
+      FLANNELD_ETCD_CAFILE=/etc/ssl/etcd/ca.crt
+      FLANNELD_IFACE={{ inventory_hostname }}
+
+  - path: /srv/tinc_conf_updater.sh
+    permissions: 0774
+    owner: root
+    content: |
+      #!/bin/sh
+      export DOCKER_HOST=unix:///var/run/early-docker.sock
+      . /etc/tinc-env
+      host=${ETCD_WATCH_KEY/\/services\/tinc\//}
+      echo "host is $host"
+      echo "$ETCD_WATCH_KEY\" key was updated to \"$ETCD_WATCH_VALUE\" value by \"$ETCD_WATCH_ACTION\" action"
+      if [ $TINC_HOSTNAME != $host ]; then
+        if [ "$ETCD_WATCH_ACTION" = "set" ]; then
+          echo "configuring new tinc host $host"
+          current_value="";
+          if [ -f /srv/tinc/hosts/$host ]; then
+            current_value="$( cat /srv/tinc/hosts/$host )"
+          fi
+          if [ "$ETCD_WATCH_VALUE" != "\"$current_value\"" ]; then
+            docker run --rm --volume /srv/tinc:/etc/tinc  jenserat/tinc add ConnectTo = $host
+            etcdctl get /services/tinc/$host | sed -e 's/\"//g' > /srv/tinc/hosts/$host
+            docker exec tinc /usr/sbin/tinc reload
+            echo "done"
+          else
+           echo "old value = new value; nothing to do"
+          fi
+        fi
+        if [ "$ETCD_WATCH_ACTION" = "delete" ] || [ "$ETCD_WATCH_ACTION" = "expire" ]; then
+          echo "removing tinc host $host"
+          docker run --rm --volume /srv/tinc:/etc/tinc  jenserat/tinc del ConnectTo = $host
+          rm -f /srv/tinc/hosts/$host
+          docker exec tinc /usr/sbin/tinc reload
+          echo "done"
+        fi
+      fi
+  - path: /home/core/ca.crt
+    permissions: 0644
+    content: |
+      {{ etcd_ca_certificate|indent(width=6) }}
+  
+  - path: /home/core/key.crt
+    permissions: 0644
+    content: |
+      {{ etcd_cert|indent(width=6) }}
+
+  - path: /home/core/key.key
+    permissions: 0644
+    content: |
+      {{ etcd_key|indent(width=6) }}
+  
+  - path: /etc/ceph/ceph.conf
+    content: {{ ceph_conf.content }}
+    encoding: base64
+
+  - path: /etc/ceph/ceph.client.admin.keyring
+    content: {{ ceph_admin_keyring.content }}
+    encoding: base64
+
+  - path: /etc/ceph/ceph.mon.keyring
+    content: {{ ceph_mon_keyring.content }}
+    encoding: base64
+
+  - path: /etc/kube_apiserver_haproxy.cfg
+    content: |
+      global
+          daemon
+          maxconn 256
+      defaults
+      #   mode http
+          timeout connect 5000ms
+          timeout client 50000ms
+          timeout server 50000ms
+      backend kubernetes-backend
+          balance roundrobin
+{% for apiserver in groups['kubernetes'] %}
+          server kube{{ loop.index }} {{ apiserver }}:6443 check
+{% endfor %}
+      frontend http
+          bind *:8080
+          default_backend kubernetes-backend 
+
+coreos:
+  #etcd:
+    # generate a new token for each unique cluster from https://discovery.etcd.io/new
+    # WARNING: replace each time you 'vagrant destroy'
+    #discovery: https://discovery.etcd.io/4dbce9b90646e13c17bd298cffc0ed99
+    #addr: {{ inventory_hostname }}:4001
+    #peer-addr: {{ inventory_hostname }}:7001
+  update:
+    reboot-strategy: off
+  etcd2:
+    # generate a new token for each unique cluster from https://discovery.etcd.io/new?size=3
+    #discovery: "{# etcd_discovery_url #}"
+    name: {{ coreos_hostname }}
+    initial-cluster: "{% for host in groups['etcd-node'] %}{{ hostvars[host]['coreos_hostname'] }}=https://{{host}}:2380{%if not loop.last %},{% endif %}{% endfor %}"
+    #initial_cluster_state: NEW
+    # multi-region and multi-cloud deployments need to use $public_ipv4
+    advertise-client-urls: "https://{{ inventory_hostname }}:2379"
+    initial-advertise-peer-urls: "https://{{ inventory_hostname }}:2380"
+    # listen on both the official ports and the legacy ports
+    # legacy ports can be omitted if your application doesn't depend on them
+    listen-client-urls: "https://0.0.0.0:2379,https://0.0.0.0:4001"
+    listen-peer-urls: "https://{{ inventory_hostname }}:2380,https://{{ inventory_hostname }}:7001"
+  fleet:
+    public-ip: {{ inventory_hostname }}
+    #  metadata: role={# coreos_role #}
+    etcd_cafile: /home/core/ca.crt
+    etcd_certfile: /home/core/key.crt
+    etcd_keyfile: /home/core/key.key
+    etcd_servers: https://{{ inventory_hostname }}:2379
+  locksmith:
+    endpoint: https://{{ inventory_hostname }}:2379
+    etcd_cafile: /home/core/ca.crt
+    etcd_certfile: /home/core/key.crt
+    etcd_keyfile: /home/core/key.key
+  flannel:
+    interface: {{ inventory_hostname }}
+  units:
+    - name: locksmithd.service
+      command: stop
+    - name: update-window.service
+      runtime: true
+      content: |
+        [Unit]
+        Description=Reboot if an update has been downloaded
+
+        [Service]
+        EnvironmentFile=/etc/environment
+        ExecStart=/opt/bin/update-window.sh 
+    - name: update-window.timer
+      runtime: true
+      command: start
+      content: |
+        [Unit]
+        Description=Reboot timer
+
+        [Timer]
+        OnCalendar=*:0/5
+
+    - name: etcd2.service
+      command: start
+      drop-ins:
+        - name: 50-network-wait.conf
+          content: |
+            [Unit]
+            Requires=systemd-networkd-wait-online.service
+            After=systemd-networkd-wait-online.service
+        - name: 30-certificates.conf
+          content: |
+            [Service]
+            # Client Env Vars
+            Environment=ETCD_CA_FILE=/home/core/ca.crt
+            Environment=ETCD_CERT_FILE=/home/core/key.crt
+            Environment=ETCD_KEY_FILE=/home/core/key.key
+            # Peer Env Vars
+            Environment=ETCD_PEER_CA_FILE=/home/core/ca.crt
+            Environment=ETCD_PEER_CERT_FILE=/home/core/key.crt
+            Environment=ETCD_PEER_KEY_FILE=/home/core/key.key
+
+    - name: docker.service
+      command: start
+      drop-ins: 
+        - name: 50-wait-for-flannel.conf
+          content: |
+            [Unit]
+            Requires=flanneld.service
+            Wants=flanneld.service
+            After=flanneld.service
+
+
+    #To use etcd2, comment out the above service and uncomment these
+    # Note: this requires a release that contains etcd2
+    #- name: etcd2.service
+    #  command: start
+{% if inventory_hostname in groups['kubernetes-master'] %}
+    #- name: generate-serviceaccount-key.service
+    #  command: start
+    #  content: |
+    #    [Unit]
+    #    Description=Generate #service-account key file
+    #    [Service]
+    #    ExecStartPre=-/usr/bin/mkdir -p /opt/bin
+    #    ExecStart=/bin/openssl genrsa -out /opt/bin/kube-serviceaccount.key 2048 2>/dev/null
+    #    RemainAfterExit=yes
+    #    Type=oneshot
+    - name: kube-apiserver.service
+      command: start
+      content: |
+        [Unit]
+        Description=Kubernetes API Server
+        Documentation=https://github.com/GoogleCloudPlatform/kubernetes
+        Requires=setup-network-environment.service etcd2.service
+        After=setup-network-environment.service etcd2.service
+        [Service]
+        EnvironmentFile=/etc/network-environment
+        ExecStartPre=-/usr/bin/mkdir -p /opt/bin
+        ExecStartPre=-/usr/bin/mkdir -p /srv/kubernetes
+        ExecStartPre=/usr/bin/curl -L -o /opt/bin/kube-apiserver -z /opt/bin/kube-apiserver https://storage.googleapis.com/kubernetes-release/release/v{{ kubernetes_version }}/bin/linux/amd64/kube-apiserver
+        ExecStartPre=/usr/bin/chmod +x /opt/bin/kube-apiserver
+        ExecStartPre=/opt/bin/wupiao 127.0.0.1:2379/v2/machines
+        ExecStart=/opt/bin/kube-apiserver \
+        #--service-account-key-file=/opt/bin/kube-serviceaccount.key \
+        --tls-cert-file=/etc/kubernetes/ssl/apiserver.pem \
+        --tls-private-key-file=/etc/kubernetes/ssl/apiserver-key.pem \
+        --client-ca-file=/etc/kubernetes/ssl/ca.pem \
+        --service-account-key-file=/etc/kubernetes/ssl/apiserver-key.pem \
+        --service-account-lookup=false \
+        --admission-control=NamespaceLifecycle,NamespaceAutoProvision,LimitRanger,SecurityContextDeny,ServiceAccount,ResourceQuota \
+        --runtime-config=api/v1 \
+        --allow-privileged=true \
+        --insecure-bind-address=127.0.0.1 \
+        --insecure-port=8080 \
+        #--etcd-config=/etc/etcd-client.config.json \
+        --etcd-cafile=/home/core/ca.crt \
+        --etcd-certfile=/home/core/key.crt \
+        --etcd-keyfile=/home/core/key.key \
+        --etcd-servers=https://{{ inventory_hostname }}:2379 \
+        --kubelet-https=true \
+        --secure-port=6443 \
+        --runtime-config=extensions/v1beta1/daemonsets=true \
+        --service-cluster-ip-range={{ k8s_service_ip_range }} \
+        #--token-auth-file=/srv/kubernetes/known_tokens.csv \
+        #--basic-auth-file=/srv/kubernetes/basic_auth.csv \
+        #--etcd-servers=http://127.0.0.1:2379 \
+        --public-address-override=${DEFAULT_IPV4} \
+        --logtostderr=true
+        Restart=always
+        RestartSec=10
+    - name: kube-controller-manager.service
+      command: start
+      content: |
+        [Unit]
+        Description=Kubernetes Controller Manager
+        Documentation=https://github.com/GoogleCloudPlatform/kubernetes
+        Requires=kube-apiserver.service
+        After=kube-apiserver.service
+        [Service]
+        ExecStartPre=/usr/bin/curl -L -o /opt/bin/kube-controller-manager -z /opt/bin/kube-controller-manager https://storage.googleapis.com/kubernetes-release/release/v{{ kubernetes_version }}/bin/linux/amd64/kube-controller-manager
+        ExecStartPre=/usr/bin/chmod +x /opt/bin/kube-controller-manager
+        ExecStart=/opt/bin/kube-controller-manager \
+        --service-account-private-key-file=/etc/kubernetes/ssl/apiserver-key.pem \
+        --root-ca-file=/etc/kubernetes/ssl/ca.pem \
+        --master=127.0.0.1:8080 \
+        --leader-elect-lease-duration=15s \
+        --leader-elect-renew-deadline=10s \
+        --leader-elect-retry-period=2s \
+        --logtostderr=true
+        Restart=always
+        RestartSec=10
+    - name: kube-scheduler.service
+      command: start
+      content: |
+        [Unit]
+        Description=Kubernetes Scheduler
+        Documentation=https://github.com/GoogleCloudPlatform/kubernetes
+        Requires=kube-apiserver.service
+        After=kube-apiserver.service
+        [Service]
+        ExecStartPre=/usr/bin/curl -L -o /opt/bin/kube-scheduler -z /opt/bin/kube-scheduler https://storage.googleapis.com/kubernetes-release/release/v{{ kubernetes_version }}/bin/linux/amd64/kube-scheduler
+        ExecStartPre=/usr/bin/chmod +x /opt/bin/kube-scheduler
+        ExecStart=/opt/bin/kube-scheduler \
+        --master=127.0.0.1:8080 \
+        --leader-elect-lease-duration=15s \
+        --leader-elect-renew-deadline=10s \
+        --leader-elect-retry-period=2s
+        Restart=always
+        RestartSec=10
+{% endif %}
+{% if inventory_hostname in groups['kubernetes-master'] or inventory_hostname in groups['kubernetes-node'] %}
+    # kubernetes network service
+    - name: setup-network-environment.service
+      command: start
+      content: |
+        [Unit]
+        Description=Setup Network Environment
+        Documentation=https://github.com/kelseyhightower/setup-network-environment
+        Requires=network-online.target
+        After=network-online.target
+        [Service]
+        ExecStartPre=-/usr/bin/mkdir -p /opt/bin
+        ExecStartPre=/usr/bin/curl -L -o /opt/bin/setup-network-environment -z /opt/bin/setup-network-environment https://github.com/kelseyhightower/setup-network-environment/releases/download/v1.0.0/setup-network-environment
+        ExecStartPre=/usr/bin/chmod +x /opt/bin/setup-network-environment
+        ExecStart=/opt/bin/setup-network-environment
+        RemainAfterExit=yes
+        Type=oneshot
+    - name: kube-proxy.service
+      command: start
+      content: |
+        [Unit]
+        Description=Kubernetes Proxy
+        Documentation=https://github.com/GoogleCloudPlatform/kubernetes
+        Requires=setup-network-environment.service
+        After=setup-network-environment.service
+        [Service]
+        ExecStartPre=/usr/bin/curl -L -o /opt/bin/kube-proxy -z /opt/bin/kube-proxy https://storage.googleapis.com/kubernetes-release/release/v{{ kubernetes_version }}/bin/linux/amd64/kube-proxy
+        ExecStartPre=/usr/bin/chmod +x /opt/bin/kube-proxy
+        # wait for kubernetes master to be up and ready
+        #ExecStartPre=/opt/bin/wupiao {{ kube_master_dns_name|default(kube_master_ip) }}:8080
+        ExecStart=/opt/bin/kube-proxy \
+        --master=https://localhost:8888 \
+        #--master=https://{{ kube_master_ip }}:6443 \
+        --kubeconfig=/etc/kubernetes/worker-kubeconfig.yaml \
+        --logtostderr=true
+        Restart=always
+        RestartSec=10
+
+    - name: kube-kubelet.service
+      command: start
+      content: |
+        [Service]
+        ExecStartPre=/usr/bin/mkdir -p /etc/kubernetes/manifests
+
+        [Unit]
+        Description=Kubernetes Kubelet
+        Documentation=https://github.com/GoogleCloudPlatform/kubernetes
+        Requires=setup-network-environment.service
+        After=setup-network-environment.service
+        [Service]
+        EnvironmentFile=/etc/network-environment
+        Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/bin"
+        ExecStartPre=/usr/bin/curl -L -o /opt/bin/kubelet -z /opt/bin/kubelet https://storage.googleapis.com/kubernetes-release/release/v{{ kubernetes_version }}/bin/linux/amd64/kubelet
+        ExecStartPre=/usr/bin/chmod +x /opt/bin/kubelet
+        # wait for kubernetes master to be up and ready
+        #ExecStartPre=/opt/bin/wupiao {{ kube_master_dns_name|default(kube_master_ip) }}:8080
+        ExecStart=/opt/bin/kubelet \
+        --address=0.0.0.0 \
+        --port=10250 \
+        --cluster-dns={{ k8s_dns_service_ip }} \
+        --cluster-domain={{ k8s_dns_domain }} \
+        --hostname-override={{ inventory_hostname }} \
+        --api-servers=https://{{ kube_master_dns_name|default(kube_master_ip) }}:6443 \
+        --allow-privileged=true \
+        --logtostderr=true \
+        --cadvisor-port=4194 \
+        --healthz-bind-address=0.0.0.0 \
+        --kubeconfig=/etc/kubernetes/worker-kubeconfig.yaml \
+        --tls-cert-file=/etc/kubernetes/ssl/worker.pem \
+        --tls-private-key-file=/etc/kubernetes/ssl/worker-key.pem \
+        --healthz-port=10248 \
+        --cert-dir=/etc/kubernetes/ssl/
+        Restart=always
+        RestartSec=10
+    - name: kube-apiserver-haproxy.service
+      command: start
+      content: |
+         [Unit]
+         Description=Ha Proxy for kubernetes api server
+         [Service]
+         TimeoutStartSec=5m
+         ExecStartPre=-/usr/bin/docker kill haproxy
+         ExecStartPre=-/usr/bin/docker rm haproxy
+         ExecStartPre=/usr/bin/docker pull haproxy:alpine
+         ExecStart=/usr/bin/docker run --rm \
+           --name haproxy \
+           -v /etc/kube_apiserver_haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg \
+           -p 127.0.0.1:8888:8080 \
+           haproxy:alpine 
+         ExecStop=-/usr/bin/docker stop haproxy
+{% endif %}
+
+    - name: early-docker.service
+      command: start
+      enable: true
+    - name: tinc-env.service
+      enable: true
+      command: start
+      content: |
+        [Unit]
+        Description=Tinc Service
+        After=etcd.service etcd2.service early-docker.service flanneld.service
+        Before=early-docker.target fleet.service
+        
+        [Service]
+        Type=oneshot
+        ExecStart=/bin/sh -c "echo \"TINC_HOSTNAME=`hostname | sed -e 's/-/_/g'`\" > /etc/tinc-env"
+    - name: flannel-wait.service
+      command: start
+      enable: true
+      content: |
+
+        [Unit]
+        Description=Wait For Flannel
+        Requires=flanneld.service
+        After=etcd.service etcd2.service early-docker.service flanneld.service
+        Before=early-docker.target
+
+        [Service]
+        Type=oneshot
+        ExecStart=/bin/sh -c "echo \"TINC_HOSTNAME=`hostname | sed -e 's/-/_/g'`\" > /etc/tinc-env"
+        ExecStartPre=/bin/sh -c "while [ ! -f /run/flannel/subnet.env ] ; do sleep 1; done"
+
+    - name: etcd-waiter.service
+      command: start
+      content: |
+        [Unit]
+        Description=etcd waiter
+        Wants=network-online.target
+        Wants=etcd2.service
+        After=etcd2.service
+        After=network-online.target
+        Before=flanneld.service
+        Before=setup-network-environment.service
+
+        [Service]
+        ExecStartPre=/usr/bin/chmod +x /opt/bin/waiter.sh
+        ExecStart=/usr/bin/bash /opt/bin/waiter.sh
+        RemainAfterExit=true
+        Type=oneshot
+
+    - name: tinc-conf.service
+      enable: true
+      command: start
+      content: |
+        [Unit]
+        Description=Tinc Configuration Service
+        After=etcd.service etcd2.service early-docker.service flanneld.service
+        Before=early-docker.target fleet.service
+
+        [Service]
+        Type=oneshot
+        ExecStart=/bin/sh -c "echo \"TINC_HOSTNAME=`hostname | sed -e 's/-/_/g'`\" > /etc/tinc-env"
+
+    - name: tinc.service
+      command: start
+      enable: true
+      content: |
+        [Unit]
+        Description=Tinc VPN Service
+        Requires=flannel-wait.service
+        After=early-docker.service flanneld.service tinc-env.service flannel-wait.service
+
+        Before=early-docker.target
+
+        [Service]
+        Environment="DOCKER_HOST=unix:///var/run/early-docker.sock"
+        EnvironmentFile=/etc/tinc-env
+
+        EnvironmentFile=/etc/environment
+
+
+        ExecStartPre=/usr/bin/docker pull jenserat/tinc
+        ExecStartPre=/usr/bin/rm -rf /srv/tinc
+        ExecStartPre=/usr/bin/mkdir -p /srv/tinc
+        ExecStartPre=/bin/sh -c "/usr/bin/docker run --rm --volume /srv/tinc:/etc/tinc  jenserat/tinc init $TINC_HOSTNAME"
+        ExecStartPre=/bin/sh -c "/usr/bin/docker run --rm --volume /srv/tinc:/etc/tinc  jenserat/tinc add Address = $COREOS_PUBLIC_IPV4"
+        TimeoutStartSec=5m
+        EnvironmentFile=/run/flannel/subnet.env
+        ExecStartPre=/bin/sh -c "/usr/bin/docker run --rm --volume /srv/tinc:/etc/tinc  jenserat/tinc add Subnet = `echo $FLANNEL_SUBNET | sed -e 's/1\\/24/0\\/24/'`"
+        ExecStartPre=/bin/sh -c "/usr/bin/docker run --rm --volume /srv/tinc:/etc/tinc  jenserat/tinc add Mode = switch"
+        ExecStartPre=/bin/sh -c "/usr/bin/docker run --rm --volume /srv/tinc:/etc/tinc  jenserat/tinc add DeviceType = tap"
+        ExecStartPre=-/usr/bin/docker rm -f tinc 
+        ExecStartPre=/usr/bin/docker run --name tinc  -d --volume /srv/tinc:/etc/tinc --net=host --device=/dev/net/tun --cap-add NET_ADMIN jenserat/tinc start  -D
+
+        ExecStart=/bin/sh -c "while true; do etcdctl set /services/tinc/$TINC_HOSTNAME  \"\\\"` cat /srv/tinc/hosts/$TINC_HOSTNAME `\"\\\" --ttl 60;sleep 45;done"
+
+        ExecStop=/usr/bin/docker rm -f tinc
+        ExecStopPost=/bin/sh -c  "etcdctl rm /services/tinc/$TINC_HOSTNAME"
+
+    - name: flanneld.service
+      command: start
+      enable: true
+      drop-ins:
+        - name: 50-network-config.conf
+          content: |
+            [Unit]
+            Requires=etcd2.service
+            After=etcd2.service etcd-waiter.service
+            Before=docker.service
+            [Service]
+            EnvironmentFile=/etc/environment
+            ExecStartPre=/usr/bin/etcdctl set /coreos.com/network/config '{ "Network": "10.1.0.0/16", "Backend": { "Type": "alloc"} }'
+        - name: 40-symlink.conf
+          content: |
+            [Service]
+            ExecStartPre=/usr/bin/ln -sf /etc/flannel/options.env /run/flannel/options.env
+            Environment="ETCD_SSL_DIR=/home/core"
+
+
+    - name: docker-bridge.service
+      command: start
+      enable: true
+      content: |
+        [Unit]
+        Description=Configure Docker Bridge
+        Requires=docker.service
+        #After=docker.socket
+        [Service]
+        Type=oneshot
+        #ExecStartPre=-/bin/sh -c "route del -net 10.1.0.0 netmask 255.255.0.0 dev tap0"
+        ExecStartPre=/bin/sh -c "while ! ifconfig -s | grep -q tap0 ; do  sleep 1; done"
+        ExecStartPre=/bin/sh -c "while ! ifconfig -s | grep -q docker0 ; do  sleep 1; done"
+        ExecStartPre=/bin/sh -c "route add -net 10.1.0.0 netmask 255.255.0.0 dev docker0"
+        #ExecStartPre=-/bin/sh -c "brctl delif docker0 tap0"
+        ExecStart=/bin/sh -c "brctl addif docker0 tap0"
+
+
+
+    - name: tinc-config-updater.service
+      command: start
+      enable: true
+      content: |
+        [Unit]
+        Description=Countinously update tinc configuration after ectd changes
+        Requires=tinc.service
+        Restart=always
+        After=tinc.service
+        
+        [Service]
+        Restart=always
+        RestartSec=10
+        EnvironmentFile=/etc/environment
+        ExecStartPre=/srv/tinc_initial_config.sh
+        ExecStart=/usr/bin/etcdctl exec-watch --recursive /services/tinc -- /srv/tinc_conf_updater.sh
+    - name: ceph-tools-install.service
+      command: start
+      enable: true
+      content: |
+        [Unit]
+        Description=Install ceph tools
+        Requires=docker.service
+        [Service]
+        Type=oneshot
+        ExecStartPre=/usr/bin/docker pull quay.io/cornelius/ceph-tools:latest
+        ExecStart=/usr/bin/docker run --rm -v /opt/bin:/opt/bin quay.io/cornelius/ceph-tools
+
+
+    - name: fleet.service
+      command: start
+    - name: docker-tcp.socket
+      command: start
+      enable: true
+      content: |
+        [Unit]
+        Description=Docker Socket for the API
+
+        [Socket]
+        ListenStream=2375
+        Service=docker.service
+        BindIPv6Only=both
+
+        [Service]
+        EnvironmentFile=/etc/environment
+
+        [Install]
+        WantedBy=sockets.target
