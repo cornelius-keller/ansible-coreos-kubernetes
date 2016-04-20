@@ -1,0 +1,48 @@
+---
+- name: reboot server into rescue image
+  hosts: coreos
+  connection: local
+  gather_facts: no
+  vars:
+      ansible_python_interpreter: /usr/bin/python
+  roles:
+    - role: boot-rescue
+
+- name: install coreos
+  hosts: coreos
+  user: root
+  gather_facts: no
+  vars:
+      coreos_public_keys:
+         - 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDL0pihrE0QLoCmSM8MdXvvdXzVQDvR79K4YXK3kI13fLBk2EDW2VpyuWDL+87lgz/eruQqHC4YoO2Y60QT8fJLs9hHQdxQePLwCjYYdiGhZkIAiuX7oZFKLAoY/pEqgCd312OdNm/nnGckpSnepGhScw2B1gHl6Au6O75oOX3lZYywEuK4zgcKCD0v6wjKUTSeznuE6VqmuwU9sGA9+5ldvwCT/4zE57Q96BdCM+pbaji5/92gKa2P9PlJxM+sRTxADDfRIhdPPmY18IT7clKk1kfRAYG/3ccZ4YpiD6bqVS89wPtatlwLL0YLS7bxWd772Mq+CZoFnAM2JTvDRxDiy0CYcck4HTBbcBmKGeXx+0S9jqpfRTEZA9gbYJ8xCLroJE7WOT5zQAv65SWL0v48xf5j+BXYPIAcZZNM1AOSkY63fb1CXbIzg2eQ3hqvyIjFywPxJdXZJVr34DWVsk3mHMschS2HPDEkrLdiMO5zcJt6+FSadTo1QaggMGhWnYRal93te0wEbC3clXfoutMufvhigNsmFCSL8qwYcPSFA8zLJdjuxOpO0+Uj54npTFoaVIaAuLdxsU5VTYCAq40aeAR3fVfLk8xOd788VPBlm+64KpgOnksa64gtK7kdH0lRBrydVsHm2xQ7qzs4uxZEyyYDAr3AvfjJNLfwzM+njQ== ssh key of cke'
+
+  roles:
+    - role: etcd-certificates
+    - { role: install-coreos,  ansible_python_interpreter: /usr/bin/python }
+    - role: kubernetes-certificates
+    - role: ceph-on-kubernetes-config
+    - { role: ansible-coreos-bootstrap, ansible_ssh_user: core, ansible_python_interpreter: "PATH=/home/core/bin:$PATH python"   }
+    - { role: cloud-config, clear_etcd_data: true, ansible_ssh_user: core, ansible_python_interpreter: "PATH=/home/core/bin:$PATH python"   }
+    - { role: unsafe_reboot, unsafe_reboot_dealay: 1, ansible_ssh_user: core, ansible_python_interpreter: "PATH=/home/core/bin:$PATH python" }
+
+- name: configure install and configure kubectl and install dns adonn
+  hosts: kubernetes
+  gather_facts: no
+  vars:
+      ansible_python_interpreter: /usr/bin/python
+  pre_tasks:
+      - name: wait for kubernetes master to come up
+        delegate_to: localhost
+        connection: local
+        when: inventory_hostname in groups['kubernetes-master']
+        wait_for:
+          host: "{{ inventory_hostname }}"
+          port: 6443
+          timeout: 600
+  roles:
+    - role: kubectl
+    - role: kubectl-config
+    - role: k8s-kubesystem-namespace
+    - role: k8s-dns-addon
+    - role: ceph-on-kubernetes-config
+    - { role: ceph-on-kubernetes-resources, ansible_ssh_user: core, ansible_python_interpreter: "PATH=/home/core/bin:$PATH python"   }
