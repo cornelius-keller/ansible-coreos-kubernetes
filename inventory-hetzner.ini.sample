@@ -1,0 +1,46 @@
+[etcd-node]
+176.9.123.237 coreos_hostname=core01
+176.9.122.117 coreos_hostname=core02
+176.9.118.230 coreos_hostname=core03
+[etcd-proxy]
+
+
+[coreos:children]
+etcd-node
+etcd-proxy
+
+[kubernetes-master]
+176.9.123.237 
+176.9.122.117
+[kubernetes-node]
+176.9.118.230
+[kubernetes:children]
+kubernetes-master
+kubernetes-node
+[ceph-mon]
+176.9.123.237
+176.9.122.117
+176.9.118.230
+[ceph-osd]
+176.9.123.237
+176.9.122.117
+176.9.118.230
+
+[all:vars]
+#kube_master_dns_name=kubemaster.bettertest.de
+kube_master_ip=176.9.123.237
+kube_cluster_name=privat
+kubernetes_version=1.2.2
+k8s_service_ip_range=10.100.0.0/16
+k8s_service_ip=10.100.0.1
+k8s_dns_service_ip=10.100.0.10
+k8s_dns_domain=cluster.local
+hetzner_webservice_username=<hetzner_webeservice_username>
+hetzner_webservice_password=<hetzner_webservice_password>
+baremetal_provider=hetzner
+kubectl_checksum=473e6924569fba30d4a50cecdc2cae5f31d97d1f662463e85b74a472105dcff4
+ansible_python_interpreter=/home/core/pypy/bin/python
+ceph_fsid=<ceph_fsid>
+ceph_key=<ceph_key>
+ceph_osd_dir=/home/core/data/ceph/osd
+rescue_authorized_key=<fingerprint of ssh key to use in rescue mode>
