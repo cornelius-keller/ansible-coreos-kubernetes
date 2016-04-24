@@ -62,9 +62,9 @@ If you want to update your cluster for example to rollout a new kubernetes versi
 ### Directories
 The cluster bootstrap creates the following Directories prefixed with your cluster name ( you can set the cluster name in the inventory ). This directories contain important configuration information like generated certificates and certification authorites for etcd and kubernetes and the ceph configuration files.
 
-* <cluster-name>-etcd-ca-keys: Contains the CA, the certificates and the pulbic / private keys used to secure etcd. Don't delete unless you dispose the cluster.
-* <cluster-name>-kubernetes-ca: Contains the CA, the certificates and the pulbic / private keys used to secure kubernets and access the cluster. Don't delete unless you dispose the cluster. 
-* <cluster-name>-ceph: contains the ceph configuration. Can be regenerated from the inventory.
+* `<cluster-name>-etcd-ca-keys`: Contains the CA, the certificates and the pulbic / private keys used to secure etcd. Don't delete unless you dispose the cluster.
+* `<cluster-name>-kubernetes-ca`: Contains the CA, the certificates and the pulbic / private keys used to secure kubernets and access the cluster. Don't delete unless you dispose the cluster. 
+* `<cluster-name>-ceph`: contains the ceph configuration. Can be regenerated from the inventory.
 
 
 
