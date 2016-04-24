@@ -3,7 +3,7 @@
 This repository contains ansible playbooks to bootstrap and update a kubernetes cluster on bare metal servers on low budget bare metal servers provided by hetzner, kimsufi or ovh.
 
 # Disclaimer 
-CoreOs, Kubernetes, Etcd, Ceph etc. are highly complex distributed systems. Use at your own risk and be sure you know what you are doing. I don't take any guearantee on your data, availability etc.
+CoreOs, Kubernetes, Etcd, Ceph etc. are highly complex distributed systems. Use at your own risk and be sure you know what you are doing. I don't take any garantee on your data, availability etc.
 
 # State of this documentation:
 The documentation is very basic for now. Open sourcing this is a spare time project and so also my time to work on this and updating the documentation is limeted. So please, if something is not working on the first try as you expected, take some time to dig into the playbooks etc. before opening an issue. I'll be happy to merge pull requests also if they are only improving the documentation.
