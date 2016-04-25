@@ -78,4 +78,6 @@
   args:
     executable: /bin/bash
 
-
+- name: restart systemd-resolved
+  command: systemctl restart systemd-resolved
+  sudo: yes
