@@ -1,4 +1,5 @@
 *-etcd-ca-keys/
 *-kubernetes-ca/
 *-ceph/
+*-loadbalancer/
 *.ini
