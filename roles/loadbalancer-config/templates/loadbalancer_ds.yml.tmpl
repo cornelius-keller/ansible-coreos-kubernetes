@@ -1,0 +1,59 @@
+apiVersion: extensions/v1beta1
+kind: DaemonSet
+metadata:
+  name: service-reverse-proxy
+  labels:
+    app: service-reverse-proxy
+spec:
+  template:
+    metadata:
+      labels:
+        app: service-loadbalancer
+    spec:
+      nodeSelector:
+        loadbalancer: "true"
+      
+      restartPolicy: Always
+      containers:
+      - image:  quay.io/cornelius/kubernetes-reverseproxy:latest
+        imagePullPolicy: Always
+        name: service-reverse-proxy
+        ports:
+        # All http services
+        - containerPort: 80
+          hostPort: 80
+          protocol: TCP
+        - containerPort: 443
+          hostPort: 443
+          protocol: TCP
+        resources: {}
+        env:
+            - name: ETCD
+ #             value: "{% for host in groups['etcd-node'] %}https://{{host}}:2380{%if not loop.last %},{% endif %}{% endfor %}"
+              value: "https://{{groups['etcd-node'][0]}}:2379"
+            - name: ETCD_CLEINT_CERT
+              value: "/etc/confd/key.crt"
+            - name: ETCD_CLEINT_KEY
+              value: "/etc/confd/key.key"
+            - name: ETCD_CLEINT_CA
+              value: "/etc/confd/ca.crt"
+        volumeMounts:
+            - mountPath: /etc/confd/ca.crt
+              name: etcd-ca
+
+            - mountPath: /etc/confd/key.key
+              name: etcd-client-key
+
+            - mountPath: /etc/confd/key.crt
+              name: etcd-client-crt
+
+      volumes:
+      - name: etcd-ca
+        hostPath: 
+            path: /home/core/ca.crt
+      - name: etcd-client-key
+        hostPath: 
+            path: /home/core/key.key
+      - name: etcd-client-crt
+        hostPath: 
+            path: /home/core/key.crt
