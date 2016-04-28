@@ -241,13 +241,15 @@ write_files:
           daemon
           maxconn 256
       defaults
-      #   mode http
+          mode tcp
+          default-server inter 1s fall 2
           timeout connect 5000ms
           timeout client 50000ms
           timeout server 50000ms
       backend kubernetes-backend
+          option ssl-hello-chk
           balance roundrobin
-{% for apiserver in groups['kubernetes'] %}
+{% for apiserver in groups['kubernetes-master'] %}
           server kube{{ loop.index }} {{ apiserver }}:6443 check
 {% endfor %}
       frontend http
