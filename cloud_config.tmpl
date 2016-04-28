@@ -514,7 +514,7 @@ coreos:
         --cluster-dns={{ k8s_dns_service_ip }} \
         --cluster-domain={{ k8s_dns_domain }} \
         --hostname-override={{ inventory_hostname }} \
-        --api-servers=https://{{ kube_master_dns_name|default(kube_master_ip) }}:6443 \
+        --api-servers=https://localhost:8888 \
         --allow-privileged=true \
         --logtostderr=true \
         --cadvisor-port=4194 \
