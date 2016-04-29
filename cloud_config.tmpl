@@ -426,7 +426,8 @@ coreos:
         ExecStart=/opt/bin/kube-controller-manager \
         --service-account-private-key-file=/etc/kubernetes/ssl/apiserver-key.pem \
         --root-ca-file=/etc/kubernetes/ssl/ca.pem \
-        --master=127.0.0.1:8080 \
+        -master=127.0.0.1:8080 \
+        --leader-elect=true \
         --leader-elect-lease-duration=15s \
         --leader-elect-renew-deadline=10s \
         --leader-elect-retry-period=2s \
@@ -446,6 +447,7 @@ coreos:
         ExecStartPre=/usr/bin/chmod +x /opt/bin/kube-scheduler
         ExecStart=/opt/bin/kube-scheduler \
         --master=127.0.0.1:8080 \
+        --leader-elect=true \
         --leader-elect-lease-duration=15s \
         --leader-elect-renew-deadline=10s \
         --leader-elect-retry-period=2s
@@ -514,7 +516,7 @@ coreos:
         --cluster-dns={{ k8s_dns_service_ip }} \
         --cluster-domain={{ k8s_dns_domain }} \
         --hostname-override={{ inventory_hostname }} \
-        --api-servers=https://localhost:8888 \
+        --api-servers={% for apiserver in groups['kubernetes-master'] %}https://{{ apiserver }}:6443{% if not loop.last %},{% endif %}{% endfor %} \
         --allow-privileged=true \
         --logtostderr=true \
         --cadvisor-port=4194 \
