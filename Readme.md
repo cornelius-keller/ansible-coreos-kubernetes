@@ -2,7 +2,7 @@
 
 This repository contains ansible playbooks to bootstrap and update a kubernetes cluster on bare metal servers on low budget bare metal servers provided by hetzner, kimsufi or ovh.
 
-# Disclaimer 
+# Disclaimer
 CoreOs, Kubernetes, Etcd, Ceph etc. are highly complex distributed systems. Use at your own risk and be sure you know what you are doing. I don't take any garantee on your data, availability etc.
 
 # State of this documentation:
@@ -21,12 +21,11 @@ The documentation is very basic for now. Open sourcing this is a spare time proj
 * installs the kubectl for you in ~/bin
 * configures the ~/.kube/config file for you for cluster access
 * Sets up a ceph cluster on top of kubernetes (highly experimental) for block devices.
-* Provides a way to update the cloudconfig of your clusrter and reboot without destroying your ceph cluster.
+* Provides a way to update the cloudconfig of your clusrter and reboot wit2hout destroying your ceph cluster.
 * Coreos auto updates are applied in a way that the ceph cluster stays alive.
-* Supports multiple clusters 
+* Supports multiple clusters
 
 ## Missing features (ToDo)
-* install a reverse proxy on dedicated nodes to get access to services inside the cluster from the outside world
 * configure centralized logging / kibana for the cluster automatically. For now have a look into the cluster addons folder in the kubernetes project for setting this up.
 * add support for glusterfs to have cluseterwide shared voumes
 * Add support for configuration switches, f.e with / withoud ceph support.
@@ -57,13 +56,13 @@ After about 10-15 min your cluster is ready and you can access it with kubectl.
 If you want to update your cluster for example to rollout a new kubernetes version or you want to update the cloud configuration for some other reasons run:
 
     ansible-playbook -i inventory-hetzner.ini update_cloudconfig.yml
-    
+
 
 ### Directories
 The cluster bootstrap creates the following Directories prefixed with your cluster name ( you can set the cluster name in the inventory ). This directories contain important configuration information like generated certificates and certification authorites for etcd and kubernetes and the ceph configuration files.
 
 * `<cluster-name>-etcd-ca-keys`: Contains the CA, the certificates and the pulbic / private keys used to secure etcd. Don't delete unless you dispose the cluster.
-* `<cluster-name>-kubernetes-ca`: Contains the CA, the certificates and the pulbic / private keys used to secure kubernets and access the cluster. Don't delete unless you dispose the cluster. 
+* `<cluster-name>-kubernetes-ca`: Contains the CA, the certificates and the pulbic / private keys used to secure kubernets and access the cluster. Don't delete unless you dispose the cluster.
 * `<cluster-name>-ceph`: contains the ceph configuration. Can be regenerated from the inventory.
 
 
@@ -75,9 +74,8 @@ The cluster bootstrap creates the following Directories prefixed with your clust
     * Wait for a lot of failure emails and a technican to fix this
     * Once you get an email from the support that your server is reinstalled with the Os you selected you are ready to go again.
 
-# Credits 
+# Credits
 
-* The genaral coreos setup is based on https://coreos.com/kubernetes/docs/latest/getting-started.html 
+* The genaral coreos setup is based on https://coreos.com/kubernetes/docs/latest/getting-started.html
 * The genearal idea on how to run ceph on top of kubernetes is inspired by https://github.com/AcalephStorage/ceph-docker/tree/kubernetes/examples
 * Many thanks to kayrus in the coreos irc channel for patiently answering all my questions.
-
