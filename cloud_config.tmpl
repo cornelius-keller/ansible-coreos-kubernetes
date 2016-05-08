@@ -182,9 +182,9 @@ write_files:
       export DOCKER_HOST=unix:///var/run/early-docker.sock
       . /etc/tinc-env
       host=${ETCD_WATCH_KEY/\/services\/tinc\//}
-      echo "host is $host"
-      echo "$ETCD_WATCH_KEY\" key was updated to \"$ETCD_WATCH_VALUE\" value by \"$ETCD_WATCH_ACTION\" action"
-      if [ $TINC_HOSTNAME != $host ]; then
+      #echo "host is $host"
+      #echo "$ETCD_WATCH_KEY\" key was updated to \"$ETCD_WATCH_VALUE\" value by \"$ETCD_WATCH_ACTION\" action"
+      if [ $TINC_/HOSTNAME != $host ]; then
         if [ "$ETCD_WATCH_ACTION" = "set" ]; then
           echo "configuring new tinc host $host"
           current_value="";
@@ -193,7 +193,8 @@ write_files:
           fi
           if [ "$ETCD_WATCH_VALUE" != "\"$current_value\"" ]; then
             docker run --rm --volume /srv/tinc:/etc/tinc  jenserat/tinc add ConnectTo = $host
-            etcdctl get /services/tinc/$host | sed -e 's/\"//g' > /srv/tinc/hosts/$host
+            #etcdctl get /services/tinc/$host | sed -e 's/\"//g' > /srv/tinc/hosts/$host
+            echo  "$ETCD_WATCH_VALUE" | sed -e 's/\"//g' > /srv/tinc/hosts/$host
             docker exec tinc /usr/sbin/tinc reload
             echo "done"
           else
@@ -246,15 +247,16 @@ write_files:
           timeout connect 5000ms
           timeout client 50000ms
           timeout server 50000ms
-      backend kubernetes-backend
+      backend apiserver_backend
+          mode tcp
           option ssl-hello-chk
-          balance roundrobin
 {% for apiserver in groups['kubernetes-master'] %}
           server kube{{ loop.index }} {{ apiserver }}:6443 check
 {% endfor %}
-      frontend http
+      frontend apiserver_frontend
+          mode tcp
           bind *:8080
-          default_backend kubernetes-backend 
+          default_backend apiserver_backend
 
 coreos:
   #etcd:
@@ -426,7 +428,7 @@ coreos:
         ExecStart=/opt/bin/kube-controller-manager \
         --service-account-private-key-file=/etc/kubernetes/ssl/apiserver-key.pem \
         --root-ca-file=/etc/kubernetes/ssl/ca.pem \
-        -master=127.0.0.1:8080 \
+        --master=127.0.0.1:8080 \
         --leader-elect=true \
         --leader-elect-lease-duration=15s \
         --leader-elect-renew-deadline=10s \
@@ -483,7 +485,7 @@ coreos:
         ExecStartPre=/usr/bin/curl -L -o /opt/bin/kube-proxy -z /opt/bin/kube-proxy https://storage.googleapis.com/kubernetes-release/release/v{{ kubernetes_version }}/bin/linux/amd64/kube-proxy
         ExecStartPre=/usr/bin/chmod +x /opt/bin/kube-proxy
         # wait for kubernetes master to be up and ready
-        #ExecStartPre=/opt/bin/wupiao {{ kube_master_dns_name|default(kube_master_ip) }}:8080
+        ExecStartPre=/opt/bin/wupiao localhost:8888
         ExecStart=/opt/bin/kube-proxy \
         --master=https://localhost:8888 \
         #--master=https://{{ kube_master_ip }}:6443 \
