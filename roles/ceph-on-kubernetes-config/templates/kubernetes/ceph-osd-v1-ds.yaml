@@ -35,12 +35,14 @@ spec:
         - name: ceph-bootstrap-rgw-keyring
           secret:
             secretName: ceph-bootstrap-rgw-keyring
+{% if ceph_osd_type == 'osd_directory' %}
         - name: osd-directory
           hostPath:
               path: "{{ ceph_osd_dir }}"
+{% endif %}
       containers:
         - name: osd-pod
-          image: quay.io/cornelius/ceph-daemon
+          image: quay.io/cornelius/ceph-daemon-test:kubernetes
 #          imagePullPolicy: Always
           volumeMounts:
             - name: devices
@@ -55,23 +57,29 @@ spec:
               mountPath: /var/lib/ceph/bootstrap-mds
             - name: ceph-bootstrap-rgw-keyring
               mountPath: /var/lib/ceph/bootstrap-rgw
+{% if ceph_osd_type == 'osd_directory' %}
             - name: osd-directory
               mountPath: /var/lib/ceph/osd
+{% endif %}
           securityContext:
             privileged: true
           env:
             - name: CEPH_DAEMON
-              value: osd_directory
+              value: osd
             - name: KV_TYPE
               value: k8s
             - name: CLUSTER
               value: ceph
             - name: CEPH_GET_ADMIN_KEY
               value: "1"
+{% if ceph_osd_type == 'osd_disk' %}
+            - name: OSD_DEVICE
+              value: "{{ ceph_osd_device }}"
+{% endif %}
           livenessProbe:
               tcpSocket:
                 port: 6800
-              initialDelaySeconds: 60
+              initialDelaySeconds: 360
               timeoutSeconds: 5
           readinessProbe:
               tcpSocket:
