@@ -23,9 +23,10 @@
       echo "g
       w" | fdisk {{ ceph_osd_device }}
   when: ceph_osd_device is defined
+  ignore_errors: true
 
 - name: reboot server
-  command: reboot
+  command: shutdown -r +1
   async: 0
   poll: 0
   ignore_errors: true
@@ -36,7 +37,7 @@
 
 
 - name: pause for a while for the reboot to kick in
-  pause: seconds=15
+  pause: seconds=75
 
 - name: waiting for server to come back
   local_action:
