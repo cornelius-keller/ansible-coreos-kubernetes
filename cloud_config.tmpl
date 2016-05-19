@@ -184,7 +184,7 @@ write_files:
       host=${ETCD_WATCH_KEY/\/services\/tinc\//}
       #echo "host is $host"
       #echo "$ETCD_WATCH_KEY\" key was updated to \"$ETCD_WATCH_VALUE\" value by \"$ETCD_WATCH_ACTION\" action"
-      if [ $TINC_/HOSTNAME != $host ]; then
+      if [ $TINC_HOSTNAME != $host ]; then
         if [ "$ETCD_WATCH_ACTION" = "set" ]; then
           echo "configuring new tinc host $host"
           current_value="";
@@ -471,6 +471,19 @@ coreos:
         ExecStartPre=/usr/bin/curl -L -o /opt/bin/setup-network-environment -z /opt/bin/setup-network-environment https://github.com/kelseyhightower/setup-network-environment/releases/download/v1.0.0/setup-network-environment
         ExecStartPre=/usr/bin/chmod +x /opt/bin/setup-network-environment
         ExecStart=/opt/bin/setup-network-environment
+        RemainAfterExit=yes
+        Type=oneshot
+    - name: setup-subnet-routes.service
+      command: start
+      content: |
+        [Unit]
+        Description=Setup Hetzner Subnet Routes
+        Documentation=https://github.com/kelseyhightower/setup-network-environment
+        Requires=docker.service
+        After=docker.service
+        [Service]
+        ExecStartPre=/usr/bin/docker pull quay.io/cornelius/hetner-netconf
+        ExecStart=/usr/bin/docker run --cap-add NET_ADMIN --net=host quay.io/cornelius/hetner-netconf
         RemainAfterExit=yes
         Type=oneshot
     - name: kube-proxy.service
