@@ -35,7 +35,46 @@ write_files:
 
   {%if inventory_hostname in groups['kubernetes-node'] or inventory_hostname in groups['kubernetes-master'] %}
 
-
+  - path: /etc/kubernetes/manifests/kube-proxy.yaml
+    content: |
+      apiVersion: v1
+      kind: Pod
+      metadata:
+        name: kube-proxy
+        namespace: kube-system
+      spec:
+        hostNetwork: true
+        containers:
+        - name: kube-proxy
+          image: quay.io/coreos/hyperkube:v{{ kubernetes_version }}_coreos.0
+          command:
+          - /hyperkube
+          - proxy
+          - --master=https://localhost:8888 
+          - --kubeconfig=/etc/kubernetes/worker-kubeconfig.yaml
+          - --proxy-mode=iptables
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - mountPath: /etc/ssl/certs
+              name: "ssl-certs"
+            - mountPath: /etc/kubernetes/worker-kubeconfig.yaml
+              name: "kubeconfig"
+              readOnly: true
+            - mountPath: /etc/kubernetes/ssl
+              name: "etc-kube-ssl"
+              readOnly: true
+        volumes:
+          - name: "ssl-certs"
+            hostPath:
+              path: "/usr/share/ca-certificates"
+          - name: "kubeconfig"
+            hostPath:
+              path: "/etc/kubernetes/worker-kubeconfig.yaml"
+          - name: "etc-kube-ssl"
+            hostPath:
+              path: "/etc/kubernetes/ssl"
+      
   - path: /etc/kubernetes/worker-kubeconfig.yaml
     content: |
       apiVersion: v1
@@ -486,26 +525,26 @@ coreos:
         ExecStart=/usr/bin/docker run --cap-add NET_ADMIN --net=host quay.io/cornelius/hetner-netconf
         RemainAfterExit=yes
         Type=oneshot
-    - name: kube-proxy.service
-      command: start
-      content: |
-        [Unit]
-        Description=Kubernetes Proxy
-        Documentation=https://github.com/GoogleCloudPlatform/kubernetes
-        Requires=setup-network-environment.service
-        After=setup-network-environment.service
-        [Service]
-        ExecStartPre=/usr/bin/curl -L -o /opt/bin/kube-proxy -z /opt/bin/kube-proxy https://storage.googleapis.com/kubernetes-release/release/v{{ kubernetes_version }}/bin/linux/amd64/kube-proxy
-        ExecStartPre=/usr/bin/chmod +x /opt/bin/kube-proxy
-        # wait for kubernetes master to be up and ready
-        ExecStartPre=/opt/bin/wupiao localhost:8888
-        ExecStart=/opt/bin/kube-proxy \
-        --master=https://localhost:8888 \
-        #--master=https://{{ kube_master_ip }}:6443 \
-        --kubeconfig=/etc/kubernetes/worker-kubeconfig.yaml \
-        --logtostderr=true
-        Restart=always
-        RestartSec=10
+#    - name: kube-proxy.service
+#      command: start
+#      content: |
+#        [Unit]
+#        Description=Kubernetes Proxy
+#        Documentation=https://github.com/GoogleCloudPlatform/kubernetes
+#        Requires=setup-network-environment.service
+#        After=setup-network-environment.service
+#        [Service]
+#        ExecStartPre=/usr/bin/curl -L -o /opt/bin/kube-proxy -z /opt/bin/kube-proxy https://storage.googleapis.com/kubernetes-release/release/v{{ kubernetes_version }}/bin/linux/amd64/kube-proxy
+#        ExecStartPre=/usr/bin/chmod +x /opt/bin/kube-proxy
+#        # wait for kubernetes master to be up and ready
+#        ExecStartPre=/opt/bin/wupiao localhost:8888
+#        ExecStart=/opt/bin/kube-proxy \
+#        --master=https://localhost:8888 \
+#        #--master=https://{{ kube_master_ip }}:6443 \
+#        --kubeconfig=/etc/kubernetes/worker-kubeconfig.yaml \
+#        --logtostderr=true
+#        Restart=always
+#        RestartSec=10
 
     - name: kube-kubelet.service
       command: start
@@ -516,14 +555,15 @@ coreos:
         [Unit]
         Description=Kubernetes Kubelet
         Documentation=https://github.com/GoogleCloudPlatform/kubernetes
-        Requires=setup-network-environment.service
-        After=setup-network-environment.service
+        Requires=setup-network-environment.service kube-apiserver-haproxy.service
+        After=setup-network-environment.service kube-apiserver-haproxy.service
         [Service]
         EnvironmentFile=/etc/network-environment
         Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/bin"
         ExecStartPre=/usr/bin/curl -L -o /opt/bin/kubelet -z /opt/bin/kubelet https://storage.googleapis.com/kubernetes-release/release/v{{ kubernetes_version }}/bin/linux/amd64/kubelet
         ExecStartPre=/usr/bin/chmod +x /opt/bin/kubelet
         # wait for kubernetes master to be up and ready
+        ExecStartPre=/opt/bin/wupiao localhost:8888
         #ExecStartPre=/opt/bin/wupiao {{ kube_master_dns_name|default(kube_master_ip) }}:8080
         ExecStart=/opt/bin/kubelet \
         --address=0.0.0.0 \
@@ -535,6 +575,7 @@ coreos:
         --allow-privileged=true \
         --logtostderr=true \
         --cadvisor-port=4194 \
+        --config=/etc/kubernetes/manifests \
         --healthz-bind-address=0.0.0.0 \
         --kubeconfig=/etc/kubernetes/worker-kubeconfig.yaml \
         --tls-cert-file=/etc/kubernetes/ssl/worker.pem \
@@ -548,6 +589,7 @@ coreos:
       content: |
          [Unit]
          Description=Ha Proxy for kubernetes api server
+         Before=kube-kubelet.service
          [Service]
          TimeoutStartSec=5m
          ExecStartPre=-/usr/bin/docker kill haproxy
@@ -559,6 +601,8 @@ coreos:
            -p 127.0.0.1:8888:8080 \
            haproxy:alpine 
          ExecStop=-/usr/bin/docker stop haproxy
+         Restart=always
+         RestartSec=10
 {% endif %}
 
     - name: early-docker.service
