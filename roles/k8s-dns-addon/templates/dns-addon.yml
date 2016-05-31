@@ -92,7 +92,7 @@ spec:
           timeoutSeconds: 5
         args:
         # command = "/kube2sky"
-        - --domain=cluster.local
+        - --domain={{ k8s_dns_domain }}
       - name: skydns
         image: gcr.io/google_containers/skydns:2015-10-13-8c72f8c
         resources:
