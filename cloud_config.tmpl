@@ -50,7 +50,7 @@ write_files:
           command:
           - /hyperkube
           - proxy
-          - --master=https://localhost:8888 
+          - --master=https://127.0.0.1:8888 
           - --kubeconfig=/etc/kubernetes/worker-kubeconfig.yaml
           - --proxy-mode=iptables
           securityContext:
@@ -135,11 +135,15 @@ write_files:
       #!/bin/bash
       . /etc/environment
       etcdctl set /needsreboot/$( cat /etc/machine-id) $( cat /etc/machine-id)
-
-  - path: /etc/systemd/resolved.conf
+  - path: /etc/systemd/network/wired.network
     content: |
-      [Resolve]
+      [Match]
+      name=en*
+      [Network]
+      DHCP=ipv4
       DNS={{ k8s_dns_service_ip }}
+      DNS=8.8.8.8
+      Domains=default.svc.cluster.local svc.cluster.local cluster.local
 
   - path: /opt/bin/waiter.sh
     owner: root
@@ -393,6 +397,10 @@ coreos:
             Requires=flanneld.service
             Wants=flanneld.service
             After=flanneld.service
+        - name: slave-mount-flags.conf
+          content: |
+            [Service]
+            MountFlags=shared
 
 
     #To use etcd2, comment out the above service and uncomment these

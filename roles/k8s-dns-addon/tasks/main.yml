@@ -77,7 +77,3 @@
       [ $(kubectl --namespace=kube-system get pods  | grep kube-dns | grep Running | wc -l) -eq 3 ]
   args:
     executable: /bin/bash
-
-- name: restart systemd-resolved
-  command: systemctl restart systemd-resolved
-  sudo: yes
