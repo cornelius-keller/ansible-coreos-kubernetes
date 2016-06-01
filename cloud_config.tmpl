@@ -728,7 +728,6 @@ coreos:
           content: |
             [Service]
             ExecStartPre=/usr/bin/ln -sf /etc/flannel/options.env /run/flannel/options.env
-            Environment="ETCD_SSL_DIR=/home/core"
 
 
     - name: docker-bridge.service
