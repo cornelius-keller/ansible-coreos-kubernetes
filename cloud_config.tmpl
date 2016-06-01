@@ -149,7 +149,7 @@ write_files:
     owner: root
     content: |
       #! /usr/bin/bash
-      until curl --cacert /home/core/ca.crt --cert /home/core/key.crt --key /home/core/key.key https://{{ inventory_hostname }}:4001/v2/machines -v; do sleep 2; done
+      until curl --cacert /etc/ssl/etcd/ca.crt --cert /etc/ssl/etcd/key.crt --key /etc/ssl/etcd/key.key https://{{ inventory_hostname }}:4001/v2/machines -v; do sleep 2; done
 
 
   - path: /etc/etcd-client.config.json
@@ -159,9 +159,9 @@ write_files:
          "cluster": {
          "machines": [ "https://{{ inventory_hostname }}:2379" ] },
          "config": { 
-            "certFile": "/home/core/key.crt",
-            "keyFile": "/home/core/key.key",
-            "caCertFiles": [ "/home/core/ca.crt" ],
+            "certFile": "/etc/ssl/etcd/key.crt",
+            "keyFile": "/etc/ssl/etcd/key.key",
+            "caCertFiles": [ "/etc/ssl/etcd/ca.crt" ],
          "timeout": 5000000000,
          "consistency": "WEAK"
          } 
@@ -198,14 +198,14 @@ write_files:
     content: |
       COREOS_PUBLIC_IPV4={{ inventory_hostname }}
       #COREOS_PRIVATE_IPV4=172.17.8.101
-      ETCDCTL_CERT_FILE=/home/core/key.crt
-      ETCDCTL_CA_FILE=/home/core/ca.crt
+      ETCDCTL_CERT_FILE=/etc/ssl/etcd/key.crt
+      ETCDCTL_CA_FILE=/etc/ssl/etcd/ca.crt
       ETCDCTL_PEERS=https://{{ inventory_hostname }}:4001
-      ETCDCTL_KEY_FILE=/home/core/key.key
-      LOCKSMITHCTL_ETCD_CERTFILE=/home/core/key.crt
-      LOCKSMITHCTL_ETCD_CAFILE=/home/core/ca.crt
+      ETCDCTL_KEY_FILE=/etc/ssl/etcd/key.key
+      LOCKSMITHCTL_ETCD_CERTFILE=/etc/ssl/etcd/key.crt
+      LOCKSMITHCTL_ETCD_CAFILE=/etc/ssl/etcd/ca.crt
       LOCKSMITHCTL_ENDPOINT=https://{{ inventory_hostname }}:4001
-      LOCKSMITHCTL_ETCD_KEYFILE=/home/core/key.key
+      LOCKSMITHCTL_ETCD_KEYFILE=/etc/ssl/etcd/key.key
 
   - path: /etc/flannel/options.env
     permissions: 0774
@@ -252,17 +252,17 @@ write_files:
           echo "done"
         fi
       fi
-  - path: /home/core/ca.crt
+  - path: /etc/ssl/etcd/ca.crt
     permissions: 0644
     content: |
       {{ etcd_ca_certificate|indent(width=6) }}
   
-  - path: /home/core/key.crt
+  - path: /etc/ssl/etcd/key.crt
     permissions: 0644
     content: |
       {{ etcd_cert|indent(width=6) }}
 
-  - path: /home/core/key.key
+  - path: /etc/ssl/etcd/key.key
     permissions: 0644
     content: |
       {{ etcd_key|indent(width=6) }}
@@ -335,15 +335,15 @@ coreos:
   fleet:
     public-ip: {{ inventory_hostname }}
     #  metadata: role={# coreos_role #}
-    etcd_cafile: /home/core/ca.crt
-    etcd_certfile: /home/core/key.crt
-    etcd_keyfile: /home/core/key.key
+    etcd_cafile: /etc/ssl/etcd/ca.crt
+    etcd_certfile: /etc/ssl/etcd/key.crt
+    etcd_keyfile: /etc/ssl/etcd/key.key
     etcd_servers: https://{{ inventory_hostname }}:2379
   locksmith:
     endpoint: https://{{ inventory_hostname }}:2379
-    etcd_cafile: /home/core/ca.crt
-    etcd_certfile: /home/core/key.crt
-    etcd_keyfile: /home/core/key.key
+    etcd_cafile: /etc/ssl/etcd/ca.crt
+    etcd_certfile: /etc/ssl/etcd/key.crt
+    etcd_keyfile: /etc/ssl/etcd/key.key
   flannel:
     interface: {{ inventory_hostname }}
   units:
@@ -380,13 +380,13 @@ coreos:
           content: |
             [Service]
             # Client Env Vars
-            Environment=ETCD_CA_FILE=/home/core/ca.crt
-            Environment=ETCD_CERT_FILE=/home/core/key.crt
-            Environment=ETCD_KEY_FILE=/home/core/key.key
+            Environment=ETCD_CA_FILE=/etc/ssl/etcd/ca.crt
+            Environment=ETCD_CERT_FILE=/etc/ssl/etcd/key.crt
+            Environment=ETCD_KEY_FILE=/etc/ssl/etcd/key.key
             # Peer Env Vars
-            Environment=ETCD_PEER_CA_FILE=/home/core/ca.crt
-            Environment=ETCD_PEER_CERT_FILE=/home/core/key.crt
-            Environment=ETCD_PEER_KEY_FILE=/home/core/key.key
+            Environment=ETCD_PEER_CA_FILE=/etc/ssl/etcd/ca.crt
+            Environment=ETCD_PEER_CERT_FILE=/etc/ssl/etcd/key.crt
+            Environment=ETCD_PEER_KEY_FILE=/etc/ssl/etcd/key.key
 
     - name: docker.service
       command: start
@@ -446,9 +446,9 @@ coreos:
         --insecure-bind-address=127.0.0.1 \
         --insecure-port=8080 \
         #--etcd-config=/etc/etcd-client.config.json \
-        --etcd-cafile=/home/core/ca.crt \
-        --etcd-certfile=/home/core/key.crt \
-        --etcd-keyfile=/home/core/key.key \
+        --etcd-cafile=/etc/ssl/etcd/ca.crt \
+        --etcd-certfile=/etc/ssl/etcd/key.crt \
+        --etcd-keyfile=/etc/ssl/etcd/key.key \
         --etcd-servers=https://{{ inventory_hostname }}:2379 \
         --kubelet-https=true \
         --secure-port=6443 \
