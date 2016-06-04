@@ -1,0 +1,39 @@
+---
+- name: reset etcd member
+  hosts: "{{ new_etcd_node }}"
+  
+  tasks:
+  
+    - name: remove node from cluster
+      shell: |
+          etcdctl member remove $(etcdctl cluster-health | grep unreachable | grep {{ inventory_hostname }} | awk '{print $2 }')
+          etcdctl member add {{ coreos_hostname }} https://{{ inventory_hostname }}:2380
+
+
+      args:
+          executable: /bin/bash
+      sudo: yes
+      delegate_to: "{{ existing_etcd_node }}"
+      when: False
+
+    - name: change etcd startup env
+      lineinfile: 
+          dest: /run/systemd/system/etcd2.service.d/20-cloudinit.conf
+          line: Environment="ETCD_INITIAL_CLUSTER_STATE=existing"
+          state: present
+      sudo: yes
+    - name: reload systemd
+      command: systemctl daemon-reload
+      sudo: yes
+
+    - name: stop etcd2.service
+      command: systemctl stop etcd2.service
+      sudo: yes
+
+    - name: remove old etcd2 data dir
+      file: path=/var/lib/etcd2/member state=absent
+      sudo: yes
+
+    - name: restart etcd2.service
+      command: systemctl start etcd2.service
+      sudo: yes
