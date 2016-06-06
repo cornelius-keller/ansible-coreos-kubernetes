@@ -579,7 +579,7 @@ coreos:
         --cluster-dns={{ k8s_dns_service_ip }} \
         --cluster-domain={{ k8s_dns_domain }} \
         --hostname-override={{ inventory_hostname }} \
-        --api-servers={% for apiserver in groups['kubernetes-master'] %}https://{{ apiserver }}:6443{% if not loop.last %},{% endif %}{% endfor %} \
+        --api-servers=https://127.0.0.1:8888 \
         --allow-privileged=true \
         --logtostderr=true \
         --cadvisor-port=4194 \
