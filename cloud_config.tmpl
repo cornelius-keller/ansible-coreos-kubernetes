@@ -135,15 +135,6 @@ write_files:
       #!/bin/bash
       . /etc/environment
       etcdctl set /needsreboot/$( cat /etc/machine-id) $( cat /etc/machine-id)
-  - path: /etc/systemd/network/wired.network
-    content: |
-      [Match]
-      name=en*
-      [Network]
-      DHCP=ipv4
-      DNS={{ k8s_dns_service_ip }}
-      DNS=8.8.8.8
-      Domains=
 
   - path: /opt/bin/waiter.sh
     owner: root
@@ -402,6 +393,20 @@ coreos:
             [Service]
             MountFlags=shared
 
+    - name: 00-wired.network
+      runtime: true
+      content: |
+        [Match]
+        Name=en*
+        [Network]
+        DHCP=ipv4
+        DNS={{ k8s_dns_service_ip }}
+        DNS=8.8.8.8
+        Domains=
+{% for ip in hetzner_failover_ips %}
+        Address={{ ip }}
+{% endfor %}
+
 
     #To use etcd2, comment out the above service and uncomment these
     # Note: this requires a release that contains etcd2
@@ -444,6 +449,7 @@ coreos:
         --runtime-config=api/v1 \
         --allow-privileged=true \
         --insecure-bind-address=127.0.0.1 \
+        --bind-address={{ inventory_hostname }} \
         --insecure-port=8080 \
         #--etcd-config=/etc/etcd-client.config.json \
         --etcd-cafile=/etc/ssl/etcd/ca.crt \
@@ -457,7 +463,6 @@ coreos:
         #--token-auth-file=/srv/kubernetes/known_tokens.csv \
         #--basic-auth-file=/srv/kubernetes/basic_auth.csv \
         #--etcd-servers=http://127.0.0.1:2379 \
-        --public-address-override=${DEFAULT_IPV4} \
         --logtostderr=true
         Restart=always
         RestartSec=10
