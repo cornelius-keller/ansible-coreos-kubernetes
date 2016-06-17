@@ -14,7 +14,6 @@
           executable: /bin/bash
       sudo: yes
       delegate_to: "{{ existing_etcd_node }}"
-      when: False
 
     - name: change etcd startup env
       lineinfile: 
