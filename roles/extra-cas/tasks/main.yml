@@ -1,0 +1,13 @@
+---
+- name: read cas 
+  slurp:
+      src: "{{ item }}"
+
+  with_fileglob:
+      - "{{ inventory_dir }}/{{ kube_cluster_name }}-extra-ca-certs/*"
+  register: extra_cas
+  delegate_to: localhost
+  connection: local
+
+- debug:
+    var: extra_cas

@@ -10,6 +10,7 @@
     - role: etcd-certificates
     - role: kubernetes-certificates
     - role: kubectl-config
+    - role: extra-cas
     - ceph-on-kubernetes-config
     - ceph-on-kubernetes-resources
     - { role: cloud-config, ansible_ssh_user: core, ansible_python_interpreter: "PATH=/home/core/bin:$PATH python" }

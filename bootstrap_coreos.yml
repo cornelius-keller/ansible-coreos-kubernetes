@@ -15,6 +15,7 @@
 
   roles:
     - role: etcd-certificates
+    - role: extra-cas
     - { role: install-coreos,  ansible_python_interpreter: /usr/bin/python }
     - role: kubernetes-certificates
     - role: ceph-on-kubernetes-config

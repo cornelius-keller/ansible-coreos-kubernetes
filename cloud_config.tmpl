@@ -33,6 +33,17 @@ write_files:
       {{ kube_apiserver_key|indent(width=6) }}
   {% endif %}
 
+  {% if extra_cas.results is defined %}
+  {% for item in extra_cas.results %}
+
+  - path: /etc/ssl/certs/{{ item.item|basename }}
+    encoding: base64
+    content: |
+      {{ item.content|indent(width=6) }}
+
+  {% endfor %}
+  {% endif %}
+
   {%if inventory_hostname in groups['kubernetes-node'] or inventory_hostname in groups['kubernetes-master'] %}
 
   - path: /etc/kubernetes/manifests/kube-proxy.yaml
@@ -378,6 +389,17 @@ coreos:
             Environment=ETCD_PEER_CA_FILE=/etc/ssl/etcd/ca.crt
             Environment=ETCD_PEER_CERT_FILE=/etc/ssl/etcd/key.crt
             Environment=ETCD_PEER_KEY_FILE=/etc/ssl/etcd/key.key
+
+    - name: update_ca_certificates.service
+      command: start
+      content: |
+        [Unit]
+        Before=early-docker.service
+        [Service]
+        ExecStart=/usr/sbin/update-ca-certificates
+        RemainAfterExit=yes
+        Type=oneshot
+
 
     - name: docker.service
       command: start
