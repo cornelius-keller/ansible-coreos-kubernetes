@@ -4,12 +4,12 @@ dependencies:
     - { role: wait_for_k8s_node,   wait_for_seconds: 300, wait_for_resource_type: node, wait_for_resource_name: "{{ inventory_hostname }}" }
     - { role: label-node, label_node: "{{ inventory_hostname }}", label_key: 'ceph-mon', label_value: 'true', when: "inventory_hostname in groups['ceph-mon']" }
     - { role: label-node, label_node: "{{ inventory_hostname }}", label_key: 'ceph-osd', label_value: 'true', when: "inventory_hostname in groups['ceph-osd']" }
-    - { role: k8s-resource, k8s_resource_name: ceph, k8s_resource_file: "{{ playbook_dir }}/{{ kube_cluster_name }}-ceph/ceph-namespace.yaml", k8s_resource_kind: namespace, k8s_resource_namespace: ceph }
-    - { role: k8s-resource, k8s_resource_name: ceph-mon, k8s_resource_file: "{{ playbook_dir }}/{{ kube_cluster_name }}-ceph/ceph-mon-v1-svc.yaml", k8s_resource_kind: service, k8s_resource_namespace: ceph }
-    - { role: k8s-resource, k8s_resource_name: ceph-bootstrap-osd-keyring, k8s_resource_file: "{{ playbook_dir }}/{{ kube_cluster_name }}-ceph/bootstrap-osd.yml", k8s_resource_kind: secret, k8s_resource_namespace: ceph }
-    - { role: k8s-resource, k8s_resource_name: ceph-bootstrap-mds-keyring, k8s_resource_file: "{{ playbook_dir }}/{{ kube_cluster_name }}-ceph/bootstrap-mds.yml", k8s_resource_kind: secret, k8s_resource_namespace: ceph}
-    - { role: k8s-resource, k8s_resource_name: ceph-bootstrap-rgw-keyring, k8s_resource_file: "{{ playbook_dir }}/{{ kube_cluster_name }}-ceph/bootstrap-rgw.yml", k8s_resource_kind: secret, k8s_resource_namespace: ceph }
-    - { role: k8s-resource, k8s_resource_name: ceph-conf-combined, k8s_resource_file: "{{ playbook_dir }}/{{ kube_cluster_name }}-ceph/combined.yaml", k8s_resource_kind: secret, k8s_resource_namespace: ceph }
-    - { role: k8s-resource, k8s_resource_name: ceph-mon, k8s_resource_file: "{{ playbook_dir }}/{{ kube_cluster_name }}-ceph/ceph-mon-v1-ds.yaml", k8s_resource_kind: daemonset, k8s_resource_namespace: ceph }
-    - { role: k8s-resource, k8s_resource_name: ceph-osd, k8s_resource_file: "{{ playbook_dir }}/{{ kube_cluster_name }}-ceph/ceph-osd-v1-ds.yaml", k8s_resource_kind: daemonset, k8s_resource_namespace: ceph }
-    - { role: k8s-resource, k8s_resource_name: ceph-mon-check, k8s_resource_file: "{{ playbook_dir }}/{{ kube_cluster_name }}-ceph/ceph-mon-check-v1-rc.yaml", k8s_resource_kind: rc, k8s_resource_namespace: ceph }
+    - { role: k8s-resource, k8s_resource_name: ceph, k8s_resource_file: "{{ inventory_dir }}/{{ kube_cluster_name }}-ceph/ceph-namespace.yaml", k8s_resource_kind: namespace, k8s_resource_namespace: ceph }
+    - { role: k8s-resource, k8s_resource_name: ceph-mon, k8s_resource_file: "{{ inventory_dir }}/{{ kube_cluster_name }}-ceph/ceph-mon-v1-svc.yaml", k8s_resource_kind: service, k8s_resource_namespace: ceph }
+    - { role: k8s-resource, k8s_resource_name: ceph-bootstrap-osd-keyring, k8s_resource_file: "{{ inventory_dir }}/{{ kube_cluster_name }}-ceph/bootstrap-osd.yml", k8s_resource_kind: secret, k8s_resource_namespace: ceph }
+    - { role: k8s-resource, k8s_resource_name: ceph-bootstrap-mds-keyring, k8s_resource_file: "{{ inventory_dir }}/{{ kube_cluster_name }}-ceph/bootstrap-mds.yml", k8s_resource_kind: secret, k8s_resource_namespace: ceph}
+    - { role: k8s-resource, k8s_resource_name: ceph-bootstrap-rgw-keyring, k8s_resource_file: "{{ inventory_dir }}/{{ kube_cluster_name }}-ceph/bootstrap-rgw.yml", k8s_resource_kind: secret, k8s_resource_namespace: ceph }
+    - { role: k8s-resource, k8s_resource_name: ceph-conf-combined, k8s_resource_file: "{{ inventory_dir }}/{{ kube_cluster_name }}-ceph/combined.yaml", k8s_resource_kind: secret, k8s_resource_namespace: ceph }
+    - { role: k8s-resource, k8s_resource_name: ceph-mon, k8s_resource_file: "{{ inventory_dir }}/{{ kube_cluster_name }}-ceph/ceph-mon-v1-ds.yaml", k8s_resource_kind: daemonset, k8s_resource_namespace: ceph }
+    - { role: k8s-resource, k8s_resource_name: ceph-osd, k8s_resource_file: "{{ inventory_dir }}/{{ kube_cluster_name }}-ceph/ceph-osd-v1-ds.yaml", k8s_resource_kind: daemonset, k8s_resource_namespace: ceph }
+    - { role: k8s-resource, k8s_resource_name: ceph-mon-check, k8s_resource_file: "{{ inventory_dir }}/{{ kube_cluster_name }}-ceph/ceph-mon-check-v1-rc.yaml", k8s_resource_kind: rc, k8s_resource_namespace: ceph }

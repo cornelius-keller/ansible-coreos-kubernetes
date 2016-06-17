@@ -2,5 +2,5 @@
 dependencies:
     - loadbalancer-config
     - { role: label-node, label_node: "{{ inventory_hostname }}", label_key: 'loadbalancer', label_value: 'true', when: "inventory_hostname in groups['loadbalancer']" }
-    - { role: k8s-resource, k8s_resource_name: service-reverse-proxy, k8s_resource_file: "{{ playbook_dir }}/{{ kube_cluster_name }}-loadbalancer/loadbalancer_ds.yml", k8s_resource_kind: daemonset, k8s_resource_namespace: default }
+    - { role: k8s-resource, k8s_resource_name: service-reverse-proxy, k8s_resource_file: "{{ inventory_dir }}/{{ kube_cluster_name }}-loadbalancer/loadbalancer_ds.yml", k8s_resource_kind: daemonset, k8s_resource_namespace: default }
 

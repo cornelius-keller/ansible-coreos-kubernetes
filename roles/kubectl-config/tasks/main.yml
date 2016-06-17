@@ -2,7 +2,7 @@
 - name: copy kubernetes ca
   local_action:
     module: copy
-    src: "{{ playbook_dir }}/{{ kube_cluster_name }}-kubernetes-ca/"
+    src: "{{ inventory_dir }}/{{ kube_cluster_name }}-kubernetes-ca/"
     dest:  "{{ lookup('env','HOME') }}/.kube/{{ kube_cluster_name }}-kubernetes-ca/"
   run_once: true
 

@@ -1,32 +1,32 @@
 ---
 - name: create ceph config dir
   file:
-    path: "{{ playbook_dir }}/{{ kube_cluster_name }}-ceph"
+    path: "{{ inventory_dir }}/{{ kube_cluster_name }}-ceph"
     state: directory
   delegate_to: localhost
   connection: local
   run_once: true
 
 - name: generate ceph.conf
-  template: src=ceph/ceph.conf.tmpl dest={{ playbook_dir }}/{{ kube_cluster_name }}-ceph/ceph.conf
+  template: src=ceph/ceph.conf.tmpl dest={{ inventory_dir }}/{{ kube_cluster_name }}-ceph/ceph.conf
   delegate_to: localhost
   connection: local
   run_once: true
 
 - name: generate admin.keyring
-  template: src=ceph/admin.keyring.tmpl dest={{ playbook_dir }}/{{ kube_cluster_name }}-ceph/admin.keyring
+  template: src=ceph/admin.keyring.tmpl dest={{ inventory_dir }}/{{ kube_cluster_name }}-ceph/admin.keyring
   delegate_to: localhost
   connection: local
   run_once: true
 
 - name: generate admin.keyring
-  template: src=ceph/mon.keyring.tmpl dest={{ playbook_dir }}/{{ kube_cluster_name }}-ceph/mon.keyring
+  template: src=ceph/mon.keyring.tmpl dest={{ inventory_dir }}/{{ kube_cluster_name }}-ceph/mon.keyring
   delegate_to: localhost
   connection: local
   run_once: true
 
 - name: generate bootstrap.keyring
-  template: src=ceph/bootstrap.keyring.tmpl dest={{ playbook_dir }}/{{ kube_cluster_name }}-ceph/bootstrap-{{ item }}.keyring
+  template: src=ceph/bootstrap.keyring.tmpl dest={{ inventory_dir }}/{{ kube_cluster_name }}-ceph/bootstrap-{{ item }}.keyring
   delegate_to: localhost
   connection: local
   run_once: true
@@ -37,7 +37,7 @@
 
 - name: slurp bootstrap keyrings
   slurp:
-      src: "{{ playbook_dir }}/{{ kube_cluster_name }}-ceph/bootstrap-{{ item }}.keyring"
+      src: "{{ inventory_dir }}/{{ kube_cluster_name }}-ceph/bootstrap-{{ item }}.keyring"
   delegate_to: localhost
   connection: local
   run_once: true
@@ -53,7 +53,7 @@
       var: bootstrap_secrets
 
 - name: template bootstrap keyring secrets
-  template: src=kubernetes/ceph-bootstrap-secret.tmpl dest={{ playbook_dir}}/{{ kube_cluster_name }}-ceph/bootstrap-{{ item.item }}.yml
+  template: src=kubernetes/ceph-bootstrap-secret.tmpl dest={{ inventory_dir}}/{{ kube_cluster_name }}-ceph/bootstrap-{{ item.item }}.yml
   register: bootstrap
   delegate_to: localhost
   connection: local
@@ -62,7 +62,7 @@
 
 - name: slurp ceph.conf
   slurp:
-      src: "{{ playbook_dir }}/{{ kube_cluster_name }}-ceph/ceph.conf"
+      src: "{{ inventory_dir }}/{{ kube_cluster_name }}-ceph/ceph.conf"
   register: ceph_conf
   delegate_to: localhost
   connection: local
@@ -70,7 +70,7 @@
 
 - name: slurp ceph.conf
   slurp:
-      src: "{{ playbook_dir }}/{{ kube_cluster_name }}-ceph/admin.keyring"
+      src: "{{ inventory_dir }}/{{ kube_cluster_name }}-ceph/admin.keyring"
   register: ceph_admin_keyring
   delegate_to: localhost
   connection: local
@@ -78,7 +78,7 @@
 
 - name: slurp ceph.conf
   slurp:
-      src: "{{ playbook_dir }}/{{ kube_cluster_name }}-ceph/mon.keyring"
+      src: "{{ inventory_dir }}/{{ kube_cluster_name }}-ceph/mon.keyring"
   register: ceph_mon_keyring
   delegate_to: localhost
   connection: local
@@ -108,7 +108,7 @@
 - name: template ceph-conf-combined.yml
   template:
       src: kubernetes/ceph-conf-combined.tmpl
-      dest: "{{ playbook_dir }}/{{ kube_cluster_name }}-ceph/combined.yaml"
+      dest: "{{ inventory_dir }}/{{ kube_cluster_name }}-ceph/combined.yaml"
   delegate_to: localhost
   connection: local
   run_once: true
@@ -116,7 +116,7 @@
 - name: templtae k8s resources
   template: 
       src: kubernetes/{{ item }}
-      dest: "{{ playbook_dir }}/{{ kube_cluster_name }}-ceph/{{ item  }}"
+      dest: "{{ inventory_dir }}/{{ kube_cluster_name }}-ceph/{{ item  }}"
   delegate_to: localhost
   connection: local
   run_once: true

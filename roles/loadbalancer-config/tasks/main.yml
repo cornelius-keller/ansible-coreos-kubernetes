@@ -2,11 +2,11 @@
 - name: create loadbalancer config dir
   local_action:
     module: file
-    path: "{{ playbook_dir}}/{{ kube_cluster_name }}-loadbalancer"
+    path: "{{ inventory_dir}}/{{ kube_cluster_name }}-loadbalancer"
     state: directory
 
 - name: template loadbalancer daemonset
   local_action:
     module: template
     src: loadbalancer_ds.yml.tmpl
-    dest: "{{ playbook_dir }}/{{ kube_cluster_name }}-loadbalancer/loadbalancer_ds.yml"
+    dest: "{{ inventory_dir }}/{{ kube_cluster_name }}-loadbalancer/loadbalancer_ds.yml"
