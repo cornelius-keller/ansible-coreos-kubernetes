@@ -628,7 +628,7 @@ coreos:
          [Service]
          TimeoutStartSec=5m
          ExecStartPre=-/usr/bin/docker kill haproxy
-         ExecStartPre=-/usr/bin/docker rm haproxy
+         ExecStartPre=-/usr/bin/docker rm -f haproxy
          ExecStartPre=/usr/bin/docker pull haproxy:alpine
          ExecStart=/usr/bin/docker run --rm \
            --name haproxy \
