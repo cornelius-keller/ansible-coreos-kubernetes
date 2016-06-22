@@ -19,9 +19,9 @@
     - { role: install-coreos,  ansible_python_interpreter: /usr/bin/python }
     - role: kubernetes-certificates
     - role: ceph-on-kubernetes-config
-    - { role: ansible-coreos-bootstrap, ansible_ssh_user: core, ansible_python_interpreter: "PATH=/home/core/bin:$PATH python"   }
-    - { role: cloud-config, clear_etcd_data: true, ansible_ssh_user: core, ansible_python_interpreter: "PATH=/home/core/bin:$PATH python"   }
-    - { role: unsafe_reboot, unsafe_reboot_dealay: 1, ansible_ssh_user: core, ansible_python_interpreter: "PATH=/home/core/bin:$PATH python" }
+    - { role: ansible-coreos-bootstrap, ansible_ssh_user: core   }
+    - { role: cloud-config, clear_etcd_data: true, ansible_ssh_user: core  }
+    - { role: unsafe_reboot, unsafe_reboot_dealay: 1, ansible_ssh_user: core }
 
 - name: configure install and configure kubectl and install dns adonn
   hosts: kubernetes
@@ -38,10 +38,9 @@
           port: 6443
           timeout: 600
   roles:
-    - role: kubectl
+    #    - role: kubectl
     - role: kubectl-config
     - role: k8s-kubesystem-namespace
-    - { role: k8s-dns-addon, ansible_ssh_user: core, ansible_python_interpreter: "PATH=/home/core/bin:$PATH python"   }
-    - role: ceph-on-kubernetes-config
-    - { role: ceph-on-kubernetes-resources, ansible_ssh_user: core, ansible_python_interpreter: "PATH=/home/core/bin:$PATH python"   }
+    - { role: k8s-dns-addon   }
+    - { role: ceph-on-kubernetes-resources, ansible_ssh_user: core, ansible_python_interpreter: /home/core/pypy/bin/python   }
     - role: loadbalancer

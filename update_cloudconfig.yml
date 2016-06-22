@@ -1,6 +1,6 @@
 ---
 - name: update cloudconfig
-  hosts: all
+  hosts: coreos
   serial: 1
   gather_facts: no
   user: core
@@ -13,7 +13,7 @@
     - role: extra-cas
     - ceph-on-kubernetes-config
     - ceph-on-kubernetes-resources
-    - { role: cloud-config, ansible_ssh_user: core, ansible_python_interpreter: "PATH=/home/core/bin:$PATH python" }
+    - role: cloud-config
     # - { role: unsafe_reboot, unsafe_reboot_dealay=360 }
     - role: safe_reboot
 
