@@ -1,4 +1,12 @@
 ---
+- name: kubectl checksum
+  local_action:
+     module: shell
+     args: "sha256sum ~/bin/kubectl  | awk '{ print $1}'"
+  run_once: yes
+  register: current_kubectl_checksum
+  changed_when: false
+
 - name: download kubectl
   local_action:
      module: get_url
@@ -7,5 +15,6 @@
      sha256sum: "{{ kubectl_checksum }}"
      mode: 0770
   run_once: yes
+  when: kubectl_checksum != current_kubectl_checksum.stdout
 
 
