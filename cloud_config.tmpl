@@ -410,10 +410,6 @@ coreos:
             Requires=flanneld.service
             Wants=flanneld.service
             After=flanneld.service
-        - name: slave-mount-flags.conf
-          content: |
-            [Service]
-            MountFlags=shared
 
     - name: 00-wired.network
       runtime: true
