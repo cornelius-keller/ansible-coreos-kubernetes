@@ -601,8 +601,8 @@ coreos:
         ExecStartPre=/opt/bin/wupiao localhost:8888
         #ExecStartPre=/opt/bin/wupiao {{ kube_master_dns_name|default(kube_master_ip) }}:8080
         ExecStart=/opt/bin/kubelet \
-        --address=0.0.0.0 \
         --port=10250 \
+        --address=127.0.0.1 \
         --cluster-dns={{ k8s_dns_service_ip }} \
         --cluster-domain={{ k8s_dns_domain }} \
         --hostname-override={{ inventory_hostname }} \
