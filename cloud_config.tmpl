@@ -7,6 +7,27 @@ ssh_authorized_keys:
   {% endfor %}
 
 write_files:
+  - path: /opt/bin/ceph
+    permissions: '0775'
+    content: |
+      #!/bin/sh
+      /usr/bin/docker run --rm --net=host -v /etc/ceph:/etc/ceph ceph/base ceph "$@"
+  - path: /opt/bin/rbd
+    owner: "root:core"
+    content: |
+      #!/bin/sh
+      /usr/bin/docker run --rm  --net=host -v /dev:/dev -v /sys:/sys --net=host --privileged=true -v /etc/ceph:/etc/ceph ceph/base rbd "$@"
+  - path: /opt/bin/rados
+    permissions: '0775'
+    content: |
+      #!/bin/sh
+      /usr/bin/docker run --rm -v /etc/ceph:/etc/ceph ceph/base rados "$@"
+  - path: /opt/bin/rados
+    permissions: '0775'
+    content: |
+      #!/bin/sh
+      /usr/bin/docker run --rm -v /etc/ceph:/etc/ceph ceph/base rados "$@"
+
   {%if inventory_hostname in groups['kubernetes-master'] or  inventory_hostname in groups['kubernetes-node'] %}
 
   - path: /etc/kubernetes/ssl/ca.pem
@@ -418,8 +439,7 @@ coreos:
         Name=en*
         [Network]
         DHCP=ipv4
-        DNS={{ k8s_dns_service_ip }}
-        DNS=8.8.8.8
+        DNS=127.0.0.1
         Domains=
 {% for ip in hetzner_failover_ips %}
         Address={{ ip }}
@@ -697,6 +717,32 @@ coreos:
         [Service]
         Type=oneshot
         ExecStart=/bin/sh -c "echo \"TINC_HOSTNAME=`hostname | sed -e 's/-/_/g'`\" > /etc/tinc-env"
+    - name: dnsmask.service
+      command: start
+      enable: true
+      content: |
+        [Unit]
+        Description=dnsmask service
+        Requires=flannel-wait.service
+        After=early-docker.service flanneld.service tinc-env.service flannel-wait.service
+
+        Before=early-docker.target
+
+        [Service]
+        Environment="DOCKER_HOST=unix:///var/run/early-docker.sock"
+
+
+        ExecStartPre=/usr/bin/docker pull quay.io/coreos/dnsmasq
+        ExecStartPre=-/usr/bin/docker rm -f dnsmask
+        ExecStart=/usr/bin/docker run  --name dnsmask --net=host --cap-add=NET_ADMIN quay.io/coreos/dnsmasq -d -q  \
+          --listen-address=127.0.0.1 \
+          --server=/cluster.local/{{ k8s_dns_service_ip }} \
+          --rev-server={{ k8s_service_ip_range }},{{ k8s_dns_service_ip }} \
+          --rev-server=10.1.0.0/16,{{ k8s_dns_service_ip }}
+
+
+        ExecStop=/usr/bin/docker rm -f dnsmask
+
 
     - name: tinc.service
       command: start
@@ -788,17 +834,6 @@ coreos:
         EnvironmentFile=/etc/environment
         ExecStartPre=/srv/tinc_initial_config.sh
         ExecStart=/usr/bin/etcdctl exec-watch --recursive /services/tinc -- /srv/tinc_conf_updater.sh
-    - name: ceph-tools-install.service
-      command: start
-      enable: true
-      content: |
-        [Unit]
-        Description=Install ceph tools
-        Requires=docker.service
-        [Service]
-        Type=oneshot
-        ExecStartPre=/usr/bin/docker pull quay.io/cornelius/ceph-tools:latest
-        ExecStart=/usr/bin/docker run --rm -v /opt/bin:/opt/bin quay.io/cornelius/ceph-tools
 
 
     - name: fleet.service
