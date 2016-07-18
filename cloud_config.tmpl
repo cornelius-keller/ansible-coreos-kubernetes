@@ -603,38 +603,22 @@ coreos:
         [Service]
         ExecStartPre=/usr/bin/mkdir -p /etc/kubernetes/manifests
 
-        [Unit]
-        Description=Kubernetes Kubelet
-        Documentation=https://github.com/GoogleCloudPlatform/kubernetes
-        Requires=setup-network-environment.service kube-apiserver-haproxy.service
-        After=setup-network-environment.service kube-apiserver-haproxy.service
-        [Service]
-        EnvironmentFile=/etc/network-environment
-        Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/bin"
-        ExecStartPre=/usr/bin/curl -L -o /opt/bin/kubelet -z /opt/bin/kubelet https://storage.googleapis.com/kubernetes-release/release/v{{ kubernetes_version }}/bin/linux/amd64/kubelet
-        ExecStartPre=/usr/bin/chmod +x /opt/bin/kubelet
-        # wait for kubernetes master to be up and ready
-        ExecStartPre=/opt/bin/wupiao localhost:8888
-        #ExecStartPre=/opt/bin/wupiao {{ kube_master_dns_name|default(kube_master_ip) }}:8080
-        ExecStart=/opt/bin/kubelet \
-        --address=0.0.0.0 \
-        --port=10250 \
-        --cluster-dns={{ k8s_dns_service_ip }} \
-        --cluster-domain={{ k8s_dns_domain }} \
-        --hostname-override={{ inventory_hostname }} \
-        --api-servers=https://127.0.0.1:8888 \
-        --allow-privileged=true \
-        --logtostderr=true \
-        --cadvisor-port=4194 \
-        --config=/etc/kubernetes/manifests \
-        --healthz-bind-address=0.0.0.0 \
-        --kubeconfig=/etc/kubernetes/worker-kubeconfig.yaml \
-        --tls-cert-file=/etc/kubernetes/ssl/worker.pem \
-        --tls-private-key-file=/etc/kubernetes/ssl/worker-key.pem \
-        --healthz-port=10248 \
-        --cert-dir=/etc/kubernetes/ssl/
+        Environment=KUBELET_VERSION=v{{ kubernetes_version  }}_coreos.1
+        ExecStart=/usr/lib/coreos/kubelet-wrapper \
+          --api-servers=https://127.0.0.1:8888 \
+          --allow-privileged=true \
+          --config=/etc/kubernetes/manifests \
+          --cluster-dns={{ k8s_dns_service_ip }} \
+          --cluster-domain={{ k8s_dns_domain }} \
+          --hostname-override={{ inventory_hostname }} \
+          --kubeconfig=/etc/kubernetes/worker-kubeconfig.yaml \
+          --tls-cert-file=/etc/kubernetes/ssl/worker.pem \
+          --tls-private-key-file=/etc/kubernetes/ssl/worker-key.pem
+
         Restart=always
         RestartSec=10
+        [Install]
+        WantedBy=multi-user.target
     - name: kube-apiserver-haproxy.service
       command: start
       content: |
