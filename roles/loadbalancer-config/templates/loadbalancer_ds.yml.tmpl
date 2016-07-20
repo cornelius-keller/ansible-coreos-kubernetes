@@ -50,10 +50,10 @@ spec:
       volumes:
       - name: etcd-ca
         hostPath: 
-            path: /home/core/ca.crt
+            path: /etc/ssl/etcd/ca.crt
       - name: etcd-client-key
         hostPath: 
-            path: /home/core/key.key
+            path: /etc/ssl/etcd/key.key
       - name: etcd-client-crt
         hostPath: 
-            path: /home/core/key.crt
+            path: /etc/ssl/etcd/key.crt
