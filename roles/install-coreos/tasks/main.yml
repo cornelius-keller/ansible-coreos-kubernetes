@@ -8,32 +8,11 @@
      apt-get -y install gawk
      wget https://raw.githubusercontent.com/coreos/init/master/bin/coreos-install -P /tmp
      chmod a+x /tmp/coreos-install
-     /tmp/coreos-install -d /dev/sda -C stable -c /tmp/cloud-config.yaml
+     sed -i '/# inform the OS of partition table changes/a \
+     sleep 10 \
+     sync' /tmp/coreos-install
+     /tmp/coreos-install -d /dev/sda -C {{ coreos_channel }} -c /tmp/cloud-config.yaml
 
-     if [ $? -ne 0 ]; then
-         echo "retry"
-         /tmp/coreos-install -d /dev/sda -C stable -c /tmp/cloud-config.yaml
-     fi
-     if [ $? -ne 0 ]; then
-         echo "retry"
-         /tmp/coreos-install -d /dev/sda -C stable -c /tmp/cloud-config.yaml
-     fi
-     if [ $? -ne 0 ]; then
-         echo "retry"
-         /tmp/coreos-install -d /dev/sda -C stable -c /tmp/cloud-config.yaml
-     fi
-     if [ $? -ne 0 ]; then
-         echo "retry"
-         /tmp/coreos-install -d /dev/sda -C stable -c /tmp/cloud-config.yaml
-     fi
-     if [ $? -ne 0 ]; then
-         echo "retry"
-         /tmp/coreos-install -d /dev/sda -C stable -c /tmp/cloud-config.yaml
-     fi
-     if [ $? -ne 0 ]; then
-         echo "retry"
-         /tmp/coreos-install -d /dev/sda -C stable -c /tmp/cloud-config.yaml
-     fi
 - name: clear osd disk 
   command: dd if=/dev/zero of={{ ceph_osd_device }} bs=512 count=1 conv=notrunc
   when: ceph_osd_device is defined
