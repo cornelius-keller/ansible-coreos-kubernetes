@@ -42,7 +42,7 @@ spec:
 {% endif %}
       containers:
         - name: osd-pod
-          image: quay.io/cornelius/ceph-daemon-test:kubernetes
+          image: quay.io/cornelius/ceph-daemon-test:latest
 #          imagePullPolicy: Always
           volumeMounts:
             - name: devices
@@ -75,6 +75,8 @@ spec:
 {% if ceph_osd_type == 'osd_disk' %}
             - name: OSD_DEVICE
               value: "{{ ceph_osd_device }}"
+              #- name: OSD_TYPE
+              #value: disk
 {% endif %}
           livenessProbe:
               tcpSocket:
