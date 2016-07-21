@@ -1,0 +1,34 @@
+---
+- name: reset ceph
+  serial: 1
+  hosts: coreos
+  
+  pre_tasks:
+      - name: delete ceph resource
+        command: kubectl delete namespace ceph
+        delegate_to: 127.0.0.1
+        run_once: true
+
+      - name: wait til namespace ceph is deleted
+        pause: minutes=5
+
+      - name: clear osd disk.
+        command: dd if=/dev/zero of={{ ceph_osd_device }} bs=512 count=1 conv=notrunc
+        when: ceph_osd_device is defined
+        sudo: yes
+
+      - name: create new partintion table on osd disk
+        shell: |
+            echo "g
+            w" | fdisk {{ ceph_osd_device }}
+        when: ceph_osd_device is defined
+        sudo: yes
+        register: fdisk_result
+        ignore_errors: yes
+
+
+   
+  roles:
+      - { role: unsafe_reboot, unsafe_reboot_dealay=300, when: fdisk_result|failed }
+      - ceph-on-kubernetes-resources
+
