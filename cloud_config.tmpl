@@ -13,7 +13,7 @@ write_files:
       #!/bin/sh
       /usr/bin/docker run --rm --net=host -v /etc/ceph:/etc/ceph ceph/base ceph "$@"
   - path: /opt/bin/rbd
-    owner: "root:core"
+    permissions: '0775'
     content: |
       #!/bin/sh
       /usr/bin/docker run --rm  --net=host -v /dev:/dev -v /sys:/sys --net=host --privileged=true -v /etc/ceph:/etc/ceph ceph/base rbd "$@"
@@ -65,7 +65,7 @@ write_files:
         hostNetwork: true
         containers:
         - name: kube-apiserver
-          image: quay.io/coreos/hyperkube:v{{ kubernetes_version }}_coreos.1
+          image: {{ hyperkube_aci }}:{{ hyperkube_aci_tag }}
           command:
           - /hyperkube
           - apiserver
@@ -122,7 +122,7 @@ write_files:
         hostNetwork: true
         containers:
         - name: kube-controller-manager
-          image: quay.io/coreos/hyperkube:v{{ kubernetes_version  }}_coreos.1
+          image: {{ hyperkube_aci }}:{{ hyperkube_aci_tag }}
           command:
           - /hyperkube
           - controller-manager
@@ -162,7 +162,7 @@ write_files:
         hostNetwork: true
         containers:
         - name: kube-scheduler
-          image: quay.io/coreos/hyperkube:v{{ kubernetes_version  }}_coreos.1
+          image: {{ hyperkube_aci }}:{{ hyperkube_aci_tag }}
           command:
           - /hyperkube
           - scheduler
@@ -204,7 +204,7 @@ write_files:
         hostNetwork: true
         containers:
         - name: kube-proxy
-          image: quay.io/coreos/hyperkube:v{{ kubernetes_version }}_coreos.0
+          image: {{ hyperkube_aci }}:{{ hyperkube_aci_tag }}
           command:
           - /hyperkube
           - proxy
@@ -618,7 +618,10 @@ coreos:
         [Service]
         ExecStartPre=/usr/bin/mkdir -p /etc/kubernetes/manifests
 
-        Environment=KUBELET_VERSION=v{{ kubernetes_version  }}_coreos.1
+        Environment=KUBELET_VERSION={{ hyperkube_aci_tag }}
+        Environment=KUBELET_ACI={{ hyperkube_aci }}
+        Environment="RKT_OPTS=--volume=ceph,kind=host,source=/etc/ceph/ --mount volume=ceph,target=/etc/ceph/ --volume=modules,kind=host,source=/lib/modules/ --mount volume=modules,target=/lib/modules/ --volume resolv-conf,kind=host,source=/etc/resolv.conf --mount volume=resolv-conf,target=/etc/resolv.conf"
+        #--volume sys,kind=host,source=/sys --mount volume=sys,target=/sys --volume dev,kind=host,source=/dev --mount volume=dev,target=/dev"
         ExecStart=/usr/lib/coreos/kubelet-wrapper \
           --api-servers=https://127.0.0.1:8888 \
           --allow-privileged=true \
@@ -722,15 +725,11 @@ coreos:
       content: |
         [Unit]
         Description=dnsmask service
-        Requires=flannel-wait.service
-        After=early-docker.service flanneld.service tinc-env.service flannel-wait.service
+        Requires=docker.service
+        After=docker.service
 
-        Before=early-docker.target
 
         [Service]
-        Environment="DOCKER_HOST=unix:///var/run/early-docker.sock"
-
-
         ExecStartPre=/usr/bin/docker pull quay.io/coreos/dnsmasq
         ExecStartPre=-/usr/bin/docker rm -f dnsmask
         ExecStart=/usr/bin/docker run  --name dnsmask --net=host --cap-add=NET_ADMIN quay.io/coreos/dnsmasq -d -q  \
@@ -739,8 +738,10 @@ coreos:
           --rev-server={{ k8s_service_ip_range }},{{ k8s_dns_service_ip }} \
           --rev-server=10.1.0.0/16,{{ k8s_dns_service_ip }}
 
-
         ExecStop=/usr/bin/docker rm -f dnsmask
+        Restart=Always
+        RestartSec=10
+        TimeoutStartSec=5m
 
 
     - name: tinc.service
