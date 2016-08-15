@@ -126,4 +126,5 @@
       - ceph-mon-v1-svc.yaml
       - ceph-namespace.yaml
       - ceph-osd-v1-ds.yaml
+      - ceph-mds-v1-dp.yaml
 
