@@ -130,6 +130,8 @@ write_files:
           - --leader-elect=true
           - --service-account-private-key-file=/etc/kubernetes/ssl/apiserver-key.pem
           - --root-ca-file=/etc/kubernetes/ssl/ca.pem
+          - --pod-eviction-timeout=10s
+          - --node-monitor-grace-period=10s
           livenessProbe:
             httpGet:
               host: 127.0.0.1
@@ -615,6 +617,8 @@ coreos:
     - name: kube-kubelet.service
       command: start
       content: |
+        [Unit]
+        After=kube-apiserver-haproxy.service
         [Service]
         ExecStartPre=/usr/bin/mkdir -p /etc/kubernetes/manifests
 
@@ -631,7 +635,12 @@ coreos:
           --hostname-override={{ inventory_hostname }} \
           --kubeconfig=/etc/kubernetes/worker-kubeconfig.yaml \
           --tls-cert-file=/etc/kubernetes/ssl/worker.pem \
-          --tls-private-key-file=/etc/kubernetes/ssl/worker-key.pem
+          --tls-private-key-file=/etc/kubernetes/ssl/worker-key.pem \
+          --register-node=true \
+          --register-schedulable=true \
+          --node-status-update-frequency=2s
+        ExecStartPost=-/opt/bin/uncordon-node
+        ExecStop=/opt/bin/drain-node
 
         Restart=always
         RestartSec=10
@@ -643,6 +652,10 @@ coreos:
          [Unit]
          Description=Ha Proxy for kubernetes api server
          Before=kube-kubelet.service
+         RequiredBy=kube-kubelet.service
+
+         Requires=docker.service
+         After=docker.service
          [Service]
          TimeoutStartSec=5m
          ExecStartPre=-/usr/bin/docker kill haproxy
@@ -739,7 +752,7 @@ coreos:
           --rev-server=10.1.0.0/16,{{ k8s_dns_service_ip }}
 
         ExecStop=/usr/bin/docker rm -f dnsmask
-        Restart=Always
+        Restart=always
         RestartSec=10
         TimeoutStartSec=5m
 
@@ -838,3 +851,17 @@ coreos:
 
     - name: fleet.service
       command: start
+    - name: clenup-at-shutdown.service
+      enable: true
+      command: start
+      content: |
+        [Unit]
+        Description=Cleanup directories populated by cloudconfig to avoid configuration drift
+        Before=network.target,kube-kubelet.service
+
+
+        [Service]
+        RemainAfterExit=yes
+        ExecStart=/bin/true
+        ExecStopPost=/opt/bin/cleanup
+        Type=oneshot
