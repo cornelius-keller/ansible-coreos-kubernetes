@@ -1,9 +1,21 @@
-- name: shutdown
-  command: shutdown -r -t +1
+---
+- name: reboot server
+  shell: sleep 5 && reboot &
   sudo: yes
+  args:
+      executable: /bin/bash
+  async: 10
+  poll: 0
 
-- name: wait a minute for reboot
-  pause: seconds=75
+
+- name: waiting for server to go down
+  local_action: 
+      module: wait_for
+      host: "{{ inventory_hostname }}"
+      port: 22
+      delay: 1
+      timeout: 60
+      state: stopped
 
 - name: waiting for server to come back
   local_action: 
