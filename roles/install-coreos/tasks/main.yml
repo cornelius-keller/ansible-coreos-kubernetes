@@ -25,18 +25,21 @@
   ignore_errors: true
 
 - name: reboot server
-  command: shutdown -r +1
-  async: 0
+  shell: sleep 5 && reboot &
+  args:
+      executable: /bin/bash
+  async: 10
   poll: 0
-  ignore_errors: true
-
-- name: remove server from local known_hosts file
-  local_action: command  /usr/bin/ssh-keygen -R {{ inventory_hostname }}
-  ignore_errors: true
 
 
-- name: pause for a while for the reboot to kick in
-  pause: seconds=75
+- name: waiting for server to go down
+  local_action: 
+      module: wait_for
+      host: "{{ inventory_hostname }}"
+      port: 22
+      delay: 1
+      timeout: 20
+      state: stopped
 
 - name: waiting for server to come back
   local_action:
@@ -45,4 +48,8 @@
       port=22
       delay=1
       timeout=200
+
+- name: remove server from local known_hosts file
+  local_action: command  /usr/bin/ssh-keygen -R {{ inventory_hostname }}
+  ignore_errors: true
 
