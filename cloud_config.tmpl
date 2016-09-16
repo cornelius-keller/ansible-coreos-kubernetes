@@ -11,22 +11,123 @@ write_files:
     permissions: '0775'
     content: |
       #!/bin/sh
-      /usr/bin/docker run --rm --net=host -v /etc/ceph:/etc/ceph ceph/base ceph "$@"
+      /usr/bin/docker run --rm -i --net=host -v /etc/ceph:/etc/ceph ceph/base ceph "$@"
   - path: /opt/bin/rbd
     permissions: '0775'
     content: |
       #!/bin/sh
-      /usr/bin/docker run --rm  --net=host -v /dev:/dev -v /sys:/sys --net=host --privileged=true -v /etc/ceph:/etc/ceph ceph/base rbd "$@"
+      /usr/bin/docker run --rm -i --net=host -v /dev:/dev -v /sys:/sys --net=host --privileged=true -v /etc/ceph:/etc/ceph ceph/base rbd "$@"
   - path: /opt/bin/rados
     permissions: '0775'
     content: |
       #!/bin/sh
-      /usr/bin/docker run --rm -v /etc/ceph:/etc/ceph ceph/base rados "$@"
+      /usr/bin/docker run --rm -i  --net=host -v  /etc/ceph:/etc/ceph ceph/base rados "$@"
   - path: /opt/bin/rados
     permissions: '0775'
     content: |
       #!/bin/sh
-      /usr/bin/docker run --rm -v /etc/ceph:/etc/ceph ceph/base rados "$@"
+      /usr/bin/docker run --rm -i  --net=host -v /etc/ceph:/etc/ceph ceph/base rados "$@"
+  - path: /opt/bin/cleanup
+    permissions: '0775'
+    content: |
+      #!/bin/sh
+      /usr/bin/rm -rf /etc/systemd/system/*
+      /usr/bin/rm -rf /etc/kubernetes/manifests
+      /usr/bin/echo "cleanup done"
+
+  - path: /opt/bin/check-cordon
+    permissions: '0775'
+    content: |
+      #!/bin/bash
+      /opt/bin/wupiao localhost:8888
+      /usr/bin/docker run --rm --net=host -v /etc/kubernetes/ssl/:/etc/kubernetes/ssl/ quay.io/cornelius/hyperkube:v1.3.5_coreos.1 \
+      /hyperkube kubectl --client-key=/etc/kubernetes/ssl/worker-key.pem --client-certificate=/etc/kubernetes/ssl/worker.pem \
+      --server=https://127.0.0.1:8888 --certificate-authority=/etc/kubernetes/ssl/ca.pem get nodes  | grep {{ inventory_hostname }} | grep  -q SchedulingDisabled 
+  - path: /opt/bin/uncordon-node
+    permissions: '0775'
+    content: |
+      #!/bin/sh
+      while /opt/bin/check-cordon
+      do
+         /usr/bin/docker run --rm --net=host -v /etc/kubernetes/ssl/:/etc/kubernetes/ssl/ quay.io/cornelius/hyperkube:v1.3.5_coreos.1 \
+         /hyperkube kubectl --client-key=/etc/kubernetes/ssl/worker-key.pem --client-certificate=/etc/kubernetes/ssl/worker.pem \
+         --server=https://127.0.0.1:8888 --certificate-authority=/etc/kubernetes/ssl/ca.pem uncordon {{ inventory_hostname }} || true
+      done
+
+  - path: /opt/bin/drain-node
+    permissions: '0775'
+    content: |
+      #!/bin/bash
+
+      ERR=1 # or some non zero error number you want
+      MAX_TRIES=4 
+      COUNT=0
+      while [  $COUNT -lt $MAX_TRIES ]; do
+         /usr/bin/docker run --rm --net=host -v /etc/kubernetes/ssl/:/etc/kubernetes/ssl/ quay.io/cornelius/hyperkube:v1.3.5_coreos.1 /hyperkube kubectl --client-key=/etc/kubernetes/ssl/worker-key.pem --client-certificate=/etc/kubernetes/ssl/worker.pem --server=https://127.0.0.1:8888 --certificate-authority=/etc/kubernetes/ssl/ca.pem drain {{ inventory_hostname }} --ignore-daemonsets=true --force --delete-local-data
+         if [ $? -eq 0 ];then
+            # try to unlock all rbd images
+            echo "unlocking rbd images held by this node"
+
+            #for image in $(/opt/bin/rbd ls); do
+            #    echo "listing locks for $image"
+            #    /opt/bin/rbd lock list $image | grep $(/bin/hostname) | while read lock; do
+            #        echo "reoving lock $lock"
+            #        /opt/bin/rbd lock rm $image $(echo $lock | awk '{print $2}') $(echo $lock | awk '{print $1}')
+            #        # skipping this because it seems to lead to deadlocks if kubelet manages to get to the point to delete it too
+            #    done 
+            #done
+
+            sleep 30 # give pods some time to evict
+            exit 0
+         fi
+         let COUNT=COUNT+1
+      done
+      echo "Too many non-successful tries"
+      exit $ERR
+
+  - path: /opt/bin/hyperkube-wrapper
+    permissions: '0775'
+    content: |
+      #!/bin/bash
+      # Wrapper for launching kubelet via rkt-fly stage1. 
+      #
+      # Make sure to set KUBELET_VERSION to an image tag published here:
+      # https://quay.io/repository/coreos/hyperkube?tab=tags Alternatively,
+      # override $KUBELET_ACI to a custom location.
+      
+      set -e
+      
+      if [ -z "${KUBELET_VERSION}" ]; then
+          echo "ERROR: must set KUBELET_VERSION"
+          exit 1
+      fi
+      
+      KUBELET_ACI="${KUBELET_ACI:-quay.io/coreos/hyperkube}"
+      
+      mkdir --parents /etc/kubernetes
+      mkdir --parents /var/lib/docker
+      mkdir --parents /var/lib/kubelet
+      mkdir --parents /run/kubelet
+      
+      exec /usr/bin/rkt run \
+        --volume etcd-certs,kind=host,source=/etc/ssl/etcd/ \
+        --volume etc-kubernetes,kind=host,source=/etc/kubernetes \
+        --volume etc-ssl-certs,kind=host,source=/usr/share/ca-certificates \
+        --volume var-lib-docker,kind=host,source=/var/lib/docker \
+        --volume var-lib-kubelet,kind=host,source=/var/lib/kubelet \
+        --volume os-release,kind=host,source=/usr/lib/os-release \
+        --volume run,kind=host,source=/run \
+        --mount volume=etcd-certs,target=/etc/ssl/etcd/ \
+        --mount volume=etc-kubernetes,target=/etc/kubernetes \
+        --mount volume=etc-ssl-certs,target=/etc/ssl/certs \
+        --mount volume=var-lib-docker,target=/var/lib/docker \
+        --mount volume=var-lib-kubelet,target=/var/lib/kubelet \
+        --mount volume=os-release,target=/etc/os-release \
+        --mount volume=run,target=/run \
+        --trust-keys-from-https \
+        $RKT_OPTS \
+        --stage1-from-dir=stage1-fly.aci \
+        ${KUBELET_ACI}:${KUBELET_VERSION} --exec=/${EXEC} -- "$@"
 
   {%if inventory_hostname in groups['kubernetes-master'] or  inventory_hostname in groups['kubernetes-node'] %}
 
@@ -53,130 +154,130 @@ write_files:
     content: |
       {{ kube_apiserver_key|indent(width=6) }}
 
-  # kube api server
-  - path: /etc/kubernetes/manifests/kube-apiserver.yaml
-    content: |
-      apiVersion: v1
-      kind: Pod
-      metadata:
-        name: kube-apiserver
-        namespace: kube-system
-      spec:
-        hostNetwork: true
-        containers:
-        - name: kube-apiserver
-          image: {{ hyperkube_aci }}:{{ hyperkube_aci_tag }}
-          command:
-          - /hyperkube
-          - apiserver
-          - --bind-address=0.0.0.0
-          - --etcd-servers=https://{{ inventory_hostname }}:2379
-          - --etcd-cafile=/etc/ssl/etcd/ca.crt
-          - --etcd-certfile=/etc/ssl/etcd/key.crt
-          - --etcd-keyfile=/etc/ssl/etcd/key.key
-          - --allow-privileged=true
-          - --service-cluster-ip-range={{ k8s_service_ip_range }}
-          - --secure-port=6443
-          - --advertise-address={{ inventory_hostname }}
-          - --admission-control=NamespaceLifecycle,LimitRanger,ServiceAccount,ResourceQuota
-          - --tls-cert-file=/etc/kubernetes/ssl/apiserver.pem
-          - --tls-private-key-file=/etc/kubernetes/ssl/apiserver-key.pem
-          - --client-ca-file=/etc/kubernetes/ssl/ca.pem
-          - --service-account-key-file=/etc/kubernetes/ssl/apiserver-key.pem
-          - --runtime-config=extensions/v1beta1=true,extensions/v1beta1/thirdpartyresources=true
-          ports:
-          - containerPort: 6443
-            hostPort: 6443
-            name: https
-          - containerPort: 8080
-            hostPort: 8080
-            name: local
-          volumeMounts:
-          - mountPath: /etc/kubernetes/ssl
-            name: ssl-certs-kubernetes
-            readOnly: true
-          - mountPath: /etc/ssl/certs
-            name: ssl-certs-host
-            readOnly: true
-          - mountPath: /etc/ssl/etcd
-            name: ssl-certs-etcd
-            readOnly: true
-        volumes:
-        - hostPath:
-            path: /etc/kubernetes/ssl
-          name: ssl-certs-kubernetes
-        - hostPath:
-            path: /etc/ssl/etcd
-          name: ssl-certs-etcd
-        - hostPath:
-            path: /usr/share/ca-certificates
-          name: ssl-certs-host
-  - path: /etc/kubernetes/manifests/kube-controller-manager.yaml
-    content: |
-      apiVersion: v1
-      kind: Pod
-      metadata:
-        name: kube-controller-manager
-        namespace: kube-system
-      spec:
-        hostNetwork: true
-        containers:
-        - name: kube-controller-manager
-          image: {{ hyperkube_aci }}:{{ hyperkube_aci_tag }}
-          command:
-          - /hyperkube
-          - controller-manager
-          - --master=http://127.0.0.1:8080
-          - --leader-elect=true
-          - --service-account-private-key-file=/etc/kubernetes/ssl/apiserver-key.pem
-          - --root-ca-file=/etc/kubernetes/ssl/ca.pem
-          - --pod-eviction-timeout=10s
-          - --node-monitor-grace-period=10s
-          livenessProbe:
-            httpGet:
-              host: 127.0.0.1
-              path: /healthz
-              port: 10252
-            initialDelaySeconds: 15
-            timeoutSeconds: 1
-          volumeMounts:
-          - mountPath: /etc/kubernetes/ssl
-            name: ssl-certs-kubernetes
-            readOnly: true
-          - mountPath: /etc/ssl/certs
-            name: ssl-certs-host
-            readOnly: true
-        volumes:
-        - hostPath:
-            path: /etc/kubernetes/ssl
-          name: ssl-certs-kubernetes
-        - hostPath:
-            path: /usr/share/ca-certificates
-          name: ssl-certs-host
-  - path: /etc/kubernetes/manifests/kube-scheduler.yaml
-    content: |
-      apiVersion: v1
-      kind: Pod
-      metadata:
-        name: kube-scheduler
-        namespace: kube-system
-      spec:
-        hostNetwork: true
-        containers:
-        - name: kube-scheduler
-          image: {{ hyperkube_aci }}:{{ hyperkube_aci_tag }}
-          command:
-          - /hyperkube
-          - scheduler
-          - --master=http://127.0.0.1:8080
-          - --leader-elect=true
-          livenessProbe:
-            httpGet:
-              host: 127.0.0.1
-              path: /healthz
-              port: 10251
-            initialDelaySeconds: 15
-            timeoutSeconds: 1
+#  # kube api server
+#  - path: /etc/kubernetes/manifests/kube-apiserver.yaml
+#    content: |
+#      apiVersion: v1
+#      kind: Pod
+#      metadata:
+#        name: kube-apiserver
+#        namespace: kube-system
+#      spec:
+#        hostNetwork: true
+#        containers:
+#        - name: kube-apiserver
+#          image: {{ hyperkube_aci }}:{{ hyperkube_aci_tag }}
+#          command:
+#          - /hyperkube
+#          - apiserver
+#          - --bind-address=0.0.0.0
+#          - --etcd-servers=https://{{ inventory_hostname }}:2379
+#          - --etcd-cafile=/etc/ssl/etcd/ca.crt
+#          - --etcd-certfile=/etc/ssl/etcd/key.crt
+#          - --etcd-keyfile=/etc/ssl/etcd/key.key
+#          - --allow-privileged=true
+#          - --service-cluster-ip-range={{ k8s_service_ip_range }}
+#          - --secure-port=6443
+#          - --advertise-address={{ inventory_hostname }}
+#          - --admission-control=NamespaceLifecycle,LimitRanger,ServiceAccount,ResourceQuota
+#          - --tls-cert-file=/etc/kubernetes/ssl/apiserver.pem
+#          - --tls-private-key-file=/etc/kubernetes/ssl/apiserver-key.pem
+#          - --client-ca-file=/etc/kubernetes/ssl/ca.pem
+#          - --service-account-key-file=/etc/kubernetes/ssl/apiserver-key.pem
+#          - --runtime-config=extensions/v1beta1=true,extensions/v1beta1/thirdpartyresources=true
+#          ports:
+#          - containerPort: 6443
+#            hostPort: 6443
+#            name: https
+#          - containerPort: 8080
+#            hostPort: 8080
+#            name: local
+#          volumeMounts:
+#          - mountPath: /etc/kubernetes/ssl
+#            name: ssl-certs-kubernetes
+#            readOnly: true
+#          - mountPath: /etc/ssl/certs
+#            name: ssl-certs-host
+#            readOnly: true
+#          - mountPath: /etc/ssl/etcd
+#            name: ssl-certs-etcd
+#            readOnly: true
+#        volumes:
+#        - hostPath:
+#            path: /etc/kubernetes/ssl
+#          name: ssl-certs-kubernetes
+#        - hostPath:
+#            path: /etc/ssl/etcd
+#          name: ssl-certs-etcd
+#        - hostPath:
+#            path: /usr/share/ca-certificates
+#          name: ssl-certs-host
+#  - path: /etc/kubernetes/manifests/kube-controller-manager.yaml
+#    content: |
+#      apiVersion: v1
+#      kind: Pod
+#      metadata:
+#        name: kube-controller-manager
+#        namespace: kube-system
+#      spec:
+#        hostNetwork: true
+#        containers:
+#        - name: kube-controller-manager
+#          image: {{ hyperkube_aci }}:{{ hyperkube_aci_tag }}
+#          command:
+#          - /hyperkube
+#          - controller-manager
+#          - --master=http://127.0.0.1:8080
+#          - --leader-elect=true
+#          - --service-account-private-key-file=/etc/kubernetes/ssl/apiserver-key.pem
+#          - --root-ca-file=/etc/kubernetes/ssl/ca.pem
+#          - --pod-eviction-timeout=10s
+#          - --node-monitor-grace-period=10s
+#          livenessProbe:
+#            httpGet:
+#              host: 127.0.0.1
+#              path: /healthz
+#              port: 10252
+#            initialDelaySeconds: 15
+#            timeoutSeconds: 1
+#          volumeMounts:
+#          - mountPath: /etc/kubernetes/ssl
+#            name: ssl-certs-kubernetes
+#            readOnly: true
+#          - mountPath: /etc/ssl/certs
+#            name: ssl-certs-host
+#            readOnly: true
+#        volumes:
+#        - hostPath:
+#            path: /etc/kubernetes/ssl
+#          name: ssl-certs-kubernetes
+#        - hostPath:
+#            path: /usr/share/ca-certificates
+#          name: ssl-certs-host
+#  - path: /etc/kubernetes/manifests/kube-scheduler.yaml
+#    content: |
+#      apiVersion: v1
+#      kind: Pod
+#      metadata:
+#        name: kube-scheduler
+#        namespace: kube-system
+#      spec:
+#        hostNetwork: true
+#        containers:
+#        - name: kube-scheduler
+#          image: {{ hyperkube_aci }}:{{ hyperkube_aci_tag }}
+#          command:
+#          - /hyperkube
+#          - scheduler
+#          - --master=http://127.0.0.1:8080
+#          - --leader-elect=true
+#          livenessProbe:
+#            httpGet:
+#              host: 127.0.0.1
+#              path: /healthz
+#              port: 10251
+#            initialDelaySeconds: 15
+#            timeoutSeconds: 1
 
 
 
@@ -195,46 +296,54 @@ write_files:
 
   {%if inventory_hostname in groups['kubernetes-node'] or inventory_hostname in groups['kubernetes-master'] %}
 
-  - path: /etc/kubernetes/manifests/kube-proxy.yaml
-    content: |
-      apiVersion: v1
-      kind: Pod
-      metadata:
-        name: kube-proxy
-        namespace: kube-system
-      spec:
-        hostNetwork: true
-        containers:
-        - name: kube-proxy
-          image: {{ hyperkube_aci }}:{{ hyperkube_aci_tag }}
-          command:
-          - /hyperkube
-          - proxy
-          - --master=https://127.0.0.1:8888 
-          - --kubeconfig=/etc/kubernetes/worker-kubeconfig.yaml
-          - --proxy-mode=iptables
-          securityContext:
-            privileged: true
-          volumeMounts:
-            - mountPath: /etc/ssl/certs
-              name: "ssl-certs"
-            - mountPath: /etc/kubernetes/worker-kubeconfig.yaml
-              name: "kubeconfig"
-              readOnly: true
-            - mountPath: /etc/kubernetes/ssl
-              name: "etc-kube-ssl"
-              readOnly: true
-        volumes:
-          - name: "ssl-certs"
-            hostPath:
-              path: "/usr/share/ca-certificates"
-          - name: "kubeconfig"
-            hostPath:
-              path: "/etc/kubernetes/worker-kubeconfig.yaml"
-          - name: "etc-kube-ssl"
-            hostPath:
-              path: "/etc/kubernetes/ssl"
-      
+#  - path: /etc/kubernetes/manifests/kube-proxy.yaml
+#    content: |
+#      apiVersion: extensions/v1beta1
+#      kind: DaemonSet
+#      metadata:
+#        name: kube-proxy-{{ inventory_hostname }}
+#        namespace: kube-system
+#        labels:
+#          app: kube-proxy
+#      spec:
+#        template:
+#          metadata:
+#            labels:
+#              app: kube-proxy
+#          spec:
+#            hostNetwork: true
+#            nodeName: "{{ inventory_hostname }}"
+#            containers:
+#            - name: kube-proxy
+#              image: quay.io/cornelius/hyperkube:v1.3.5_coreos.1
+#              command:
+#              - /hyperkube
+#              - proxy
+#              - --master=https://127.0.0.1:8888 
+#              - --kubeconfig=/etc/kubernetes/worker-kubeconfig.yaml
+#              - --proxy-mode=iptables
+#              securityContext:
+#                privileged: true
+#              volumeMounts:
+#                - mountPath: /etc/ssl/certs
+#                  name: "ssl-certs"
+#                - mountPath: /etc/kubernetes/worker-kubeconfig.yaml
+#                  name: "kubeconfig"
+#                  readOnly: true
+#                - mountPath: /etc/kubernetes/ssl
+#                  name: "etc-kube-ssl"
+#                  readOnly: true
+#            volumes:
+#              - name: "ssl-certs"
+#                hostPath:
+#                  path: "/usr/share/ca-certificates"
+#              - name: "kubeconfig"
+#                hostPath:
+#                  path: "/etc/kubernetes/worker-kubeconfig.yaml"
+#              - name: "etc-kube-ssl"
+#                hostPath:
+#                  path: "/etc/kubernetes/ssl"
+
   - path: /etc/kubernetes/worker-kubeconfig.yaml
     content: |
       apiVersion: v1
@@ -582,9 +691,102 @@ coreos:
     #  command: start
 {% if inventory_hostname in groups['kubernetes-master'] %}
     # systemd services master only
+    - name: kube-apiserver.service
+      command: start
+      content: |
+        [Unit]
+        Description=Kubernetes API Server
+        Documentation=https://github.com/GoogleCloudPlatform/kubernetes
+        Requires=setup-network-environment.service etcd2.service
+        After=setup-network-environment.service etcd2.service kubernetes-networking.target
+        Before=kube-kubelet.service
+        [Service]
+        Environment=KUBELET_VERSION={{ hyperkube_aci_tag }}
+        Environment=KUBELET_ACI={{ hyperkube_aci }}
+        Environment=EXEC=apiserver
+        ExecStart=/opt/bin/hyperkube-wrapper \
+        #--service-account-key-file=/opt/bin/kube-serviceaccount.key \
+        --tls-cert-file=/etc/kubernetes/ssl/apiserver.pem \
+        --tls-private-key-file=/etc/kubernetes/ssl/apiserver-key.pem \
+        --client-ca-file=/etc/kubernetes/ssl/ca.pem \
+        --service-account-key-file=/etc/kubernetes/ssl/apiserver-key.pem \
+        --service-account-lookup=false \
+        --admission-control=NamespaceLifecycle,NamespaceAutoProvision,LimitRanger,SecurityContextDeny,ServiceAccount,ResourceQuota \
+        --runtime-config=api/v1 \
+        --allow-privileged=true \
+        --insecure-bind-address=127.0.0.1 \
+        --bind-address={{ inventory_hostname }} \
+        --insecure-port=8080 \
+        #--etcd-config=/etc/etcd-client.config.json \
+        --etcd-cafile=/etc/ssl/etcd/ca.crt \
+        --etcd-certfile=/etc/ssl/etcd/key.crt \
+        --etcd-keyfile=/etc/ssl/etcd/key.key \
+        --etcd-servers=https://{{ inventory_hostname }}:2379 \
+        --kubelet-https=true \
+        --secure-port=6443 \
+        --runtime-config=extensions/v1beta1/daemonsets=true \
+        --service-cluster-ip-range={{ k8s_service_ip_range }} \
+        #--token-auth-file=/srv/kubernetes/known_tokens.csv \
+        #--basic-auth-file=/srv/kubernetes/basic_auth.csv \
+        #--etcd-servers=http://127.0.0.1:2379 \
+        --logtostderr=true
+        Restart=always
+        RestartSec=10
+
+    - name: kube-controller-manager.service
+      command: start
+      content: |
+        [Unit]
+        Description=Kubernetes Controller Manager
+        Documentation=https://github.com/GoogleCloudPlatform/kubernetes
+        Requires=kube-apiserver.service
+        After=kube-apiserver.service
+        Before=kube-kubelet.service
+        [Service]
+        Environment=KUBELET_VERSION={{ hyperkube_aci_tag }}
+        Environment=KUBELET_ACI={{ hyperkube_aci }}
+        Environment=EXEC=controller-manager
+        ExecStart=/opt/bin/hyperkube-wrapper \
+        --service-account-private-key-file=/etc/kubernetes/ssl/apiserver-key.pem \
+        --root-ca-file=/etc/kubernetes/ssl/ca.pem \
+        --master=127.0.0.1:8080 \
+        --leader-elect=true \
+        --leader-elect-lease-duration=15s \
+        --leader-elect-renew-deadline=10s \
+        --leader-elect-retry-period=2s \
+        --logtostderr=true
+        Restart=always
+        RestartSec=10
+    - name: kube-scheduler.service
+      command: start
+      content: |
+        [Unit]
+        Description=Kubernetes Scheduler
+        Documentation=https://github.com/GoogleCloudPlatform/kubernetes
+        Requires=kube-apiserver.service
+        After=kube-apiserver.service
+        Before=kube-kubelet.service
+        [Service]
+        Environment=KUBELET_VERSION={{ hyperkube_aci_tag }}
+        Environment=KUBELET_ACI={{ hyperkube_aci }}
+        Environment=EXEC=scheduler
+        ExecStart=/opt/bin/hyperkube-wrapper \
+        --master=127.0.0.1:8080 \
+        --leader-elect=true \
+        --leader-elect-lease-duration=15s \
+        --leader-elect-renew-deadline=10s \
+        --leader-elect-retry-period=2s
+        Restart=always
+        RestartSec=10
+
 {% endif %}
 {% if inventory_hostname in groups['kubernetes-master'] or inventory_hostname in groups['kubernetes-node'] %}
     # kubernetes network service
+    - name: kubernetes-networking.target
+      command: start
+      content: |
+        [Unit]
+        Description=services required for proper container networking
     - name: setup-network-environment.service
       command: start
       content: |
@@ -613,14 +815,51 @@ coreos:
         ExecStart=/usr/bin/docker run --cap-add NET_ADMIN --net=host quay.io/cornelius/hetner-netconf
         RemainAfterExit=yes
         Type=oneshot
+    - name: kube-proxy.service
+      enable: true
+      command: start
+      content: |
+        [Unit]
+        Description=Kubernetes Proxy
+        Documentation=https://github.com/GoogleCloudPlatform/kubernetes
+        Requires=docker.service
+        After=docker.service
+        Before=kubernetes-networking.target
+
+        [Install]
+        WantedBy=kubernetes-networking.target
+
+        [Service]
+        TimeoutStartSec=5m
+        Environment=KUBELET_VERSION={{ hyperkube_aci_tag }}
+        Environment=KUBELET_ACI={{ hyperkube_aci }}
+        ExecStartPre=/usr/bin/docker pull {{ hyperkube_aci }}:{{ hyperkube_aci_tag }}
+        ExecStartPre=-/usr/bin/docker rm -f kube-proxy
+        ExecStart=/usr/bin/docker run \
+                   -v  /etc/kubernetes/:/etc/kubernetes/ \
+                   --name=kube-proxy \
+                   --net=host --privileged=true \
+                   {{ hyperkube_aci }}:{{ hyperkube_aci_tag }} \
+                   /hyperkube proxy \
+                   --master=https://localhost:8888 \
+                   --kubeconfig=/etc/kubernetes/worker-kubeconfig.yaml \
+                   --logtostderr=true \
+                   --proxy-mode=iptables
+        ExecStop=/usr/bin/docker rm -f kube-proxy
+        Restart=always
+        RestartSec=10
 
     - name: kube-kubelet.service
       command: start
       content: |
         [Unit]
-        After=kube-apiserver-haproxy.service
+        After=kubernetes-networking.target docker.service
+        Requires=kubernetes-networking.target docker.service
+
         [Service]
         ExecStartPre=/usr/bin/mkdir -p /etc/kubernetes/manifests
+        ExecStartPre=/usr/bin/docker pull ceph/base
+        TimeoutStopSec=60s
 
         Environment=KUBELET_VERSION={{ hyperkube_aci_tag }}
         Environment=KUBELET_ACI={{ hyperkube_aci }}
@@ -644,18 +883,18 @@ coreos:
 
         Restart=always
         RestartSec=10
+
         [Install]
         WantedBy=multi-user.target
     - name: kube-apiserver-haproxy.service
+      enable: true
       command: start
       content: |
          [Unit]
          Description=Ha Proxy for kubernetes api server
-         Before=kube-kubelet.service
-         RequiredBy=kube-kubelet.service
-
-         Requires=docker.service
          After=docker.service
+         Before=kubernetes-networking.target
+
          [Service]
          TimeoutStartSec=5m
          ExecStartPre=-/usr/bin/docker kill haproxy
@@ -667,8 +906,13 @@ coreos:
            -p 127.0.0.1:8888:8080 \
            haproxy:alpine 
          ExecStop=-/usr/bin/docker stop haproxy
+         ExecStop=-/usr/bin/docker rm haproxy
          Restart=always
          RestartSec=10
+
+         [Install]
+         WantedBy=kubernetes-networking.target
+
 {% endif %}
 
     - name: early-docker.service
@@ -739,7 +983,10 @@ coreos:
         [Unit]
         Description=dnsmask service
         Requires=docker.service
-        After=docker.service
+        Before=kubernetes-networking.target
+
+        [Install]
+        WantedBy=kubernetes-networking.target
 
 
         [Service]
@@ -751,7 +998,8 @@ coreos:
           --rev-server={{ k8s_service_ip_range }},{{ k8s_dns_service_ip }} \
           --rev-server=10.1.0.0/16,{{ k8s_dns_service_ip }}
 
-        ExecStop=/usr/bin/docker rm -f dnsmask
+        #ExecStop=/usr/bin/sleep 50
+        ExecStopPost=/usr/bin/docker rm -f dnsmask
         Restart=always
         RestartSec=10
         TimeoutStartSec=5m
@@ -764,9 +1012,11 @@ coreos:
         [Unit]
         Description=Tinc VPN Service
         Requires=flannel-wait.service
-        After=early-docker.service flanneld.service tinc-env.service flannel-wait.service
+        After=early-docker.service flanneld.service tinc-env.service flannel-wait.service 
+        Before=kubernetes-networking.target tinc-config-updater.service
 
-        Before=early-docker.target
+        [Install]
+        WantedBy=kubernetes-networking.target
 
         [Service]
         Environment="DOCKER_HOST=unix:///var/run/early-docker.sock"
@@ -792,6 +1042,27 @@ coreos:
 
         ExecStop=/usr/bin/docker rm -f tinc
         ExecStopPost=/bin/sh -c  "etcdctl rm /services/tinc/$TINC_HOSTNAME"
+
+    - name: tinc-config-updater.service
+      command: start
+      enable: true
+      content: |
+        [Unit]
+        Description=Countinously update tinc configuration after ectd changes
+        After=tinc.service
+        Before=kubernetes-networking.target
+        Restart=always
+
+        [Install]
+        WantedBy=kubernetes-networking.target
+        
+        [Service]
+        Restart=always
+        RestartSec=10
+        EnvironmentFile=/etc/environment
+        ExecStartPre=/srv/tinc_initial_config.sh
+        ExecStart=/usr/bin/etcdctl exec-watch --recursive /services/tinc -- /srv/tinc_conf_updater.sh
+
 
     - name: flanneld.service
       command: start
@@ -829,26 +1100,6 @@ coreos:
         #ExecStartPre=-/bin/sh -c "brctl delif docker0 tap0"
         ExecStart=/bin/sh -c "brctl addif docker0 tap0"
 
-
-
-    - name: tinc-config-updater.service
-      command: start
-      enable: true
-      content: |
-        [Unit]
-        Description=Countinously update tinc configuration after ectd changes
-        Requires=tinc.service
-        Restart=always
-        After=tinc.service
-        
-        [Service]
-        Restart=always
-        RestartSec=10
-        EnvironmentFile=/etc/environment
-        ExecStartPre=/srv/tinc_initial_config.sh
-        ExecStart=/usr/bin/etcdctl exec-watch --recursive /services/tinc -- /srv/tinc_conf_updater.sh
-
-
     - name: fleet.service
       command: start
     - name: clenup-at-shutdown.service
@@ -857,7 +1108,11 @@ coreos:
       content: |
         [Unit]
         Description=Cleanup directories populated by cloudconfig to avoid configuration drift
-        Before=network.target,kube-kubelet.service
+        Before=network.target
+        RequiredBy=kube-kubelet.service
+
+        [Install]
+        WantedBy=kubernetes-networking.target
 
 
         [Service]
