@@ -12,12 +12,9 @@
     - role: kubectl-config
     - role: extra-cas
     - ceph-on-kubernetes-config
-    - ceph-on-kubernetes-resources
+    #- ceph-on-kubernetes-resources
     - role: cloud-config
-    # - { role: unsafe_reboot, unsafe_reboot_dealay=360 }
-    - role: safe_reboot
-
-
-  pre_tasks:
-    - name: debug role
-      debug: var=role
+    #- role: drain
+    #- { role: unsafe_reboot, unsafe_reboot_dealay=900 }
+    #- role: safe_reboot
+ 
