@@ -1,8 +1,8 @@
 ---
-- name: reset ceph
+- name: remove ceph
   serial: 1
   hosts: coreos
-  
+
   pre_tasks:
       - name: delete ceph resource
         command: kubectl delete namespace ceph
@@ -11,6 +11,7 @@
 
       - name: wait til namespace ceph is deleted
         pause: minutes=5
+        run_once: true
 
       - name: clear osd disk.
         command: dd if=/dev/zero of={{ ceph_osd_device }} bs=512 count=1 conv=notrunc
@@ -27,8 +28,12 @@
         ignore_errors: yes
 
 
-   
+
   roles:
       - { role: unsafe_reboot, unsafe_reboot_dealay=300, when: fdisk_result|failed }
+
+- name: reinstall ceph
+  hosts: coreos
+  roles:
       - ceph-on-kubernetes-resources
 
