@@ -16,5 +16,5 @@
     - role: cloud-config
     #- role: drain
     #- { role: unsafe_reboot, unsafe_reboot_dealay=900 }
-    #- role: safe_reboot
+    - role: safe_reboot
  
