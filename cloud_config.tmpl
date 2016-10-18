@@ -863,7 +863,7 @@ coreos:
 
         Environment=KUBELET_VERSION={{ hyperkube_aci_tag }}
         Environment=KUBELET_ACI={{ hyperkube_aci }}
-        Environment="RKT_OPTS=--volume=ceph,kind=host,source=/etc/ceph/ --mount volume=ceph,target=/etc/ceph/ --volume=modules,kind=host,source=/lib/modules/ --mount volume=modules,target=/lib/modules/ --volume resolv-conf,kind=host,source=/etc/resolv.conf --mount volume=resolv-conf,target=/etc/resolv.conf"
+        Environment="RKT_OPTS=--volume=ceph,kind=host,source=/etc/ceph/ --mount volume=ceph,target=/etc/ceph/ --volume=modules,kind=host,source=/lib/modules/ --mount volume=modules,target=/lib/modules/ --volume resolv-conf,kind=host,source=/etc/resolv.conf --mount volume=resolv-conf,target=/etc/resolv.conf --volume var-log-containers,kind=host,source=/var/log/containers/ --mount volume=var-log-containers,target=/var/log/containers/"
         #--volume sys,kind=host,source=/sys --mount volume=sys,target=/sys --volume dev,kind=host,source=/dev --mount volume=dev,target=/dev"
         ExecStart=/usr/lib/coreos/kubelet-wrapper \
           --api-servers=https://127.0.0.1:8888 \
