@@ -1,2 +1,3 @@
 ---
 coreos_channel: stable
+coreos_public_keys: []
