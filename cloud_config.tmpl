@@ -65,19 +65,13 @@ write_files:
       while [  $COUNT -lt $MAX_TRIES ]; do
          /usr/bin/docker run --rm --net=host -v /etc/kubernetes/ssl/:/etc/kubernetes/ssl/ quay.io/cornelius/hyperkube:v1.3.5_coreos.1 /hyperkube kubectl --client-key=/etc/kubernetes/ssl/worker-key.pem --client-certificate=/etc/kubernetes/ssl/worker.pem --server=https://127.0.0.1:8888 --certificate-authority=/etc/kubernetes/ssl/ca.pem drain {{ inventory_hostname }} --ignore-daemonsets=true --force --delete-local-data
          if [ $? -eq 0 ];then
-            # try to unlock all rbd images
-            echo "unlocking rbd images held by this node"
-
-            #for image in $(/opt/bin/rbd ls); do
-            #    echo "listing locks for $image"
-            #    /opt/bin/rbd lock list $image | grep $(/bin/hostname) | while read lock; do
-            #        echo "reoving lock $lock"
-            #        /opt/bin/rbd lock rm $image $(echo $lock | awk '{print $2}') $(echo $lock | awk '{print $1}')
-            #        # skipping this because it seems to lead to deadlocks if kubelet manages to get to the point to delete it too
-            #    done 
-            #done
-
-            sleep 30 # give pods some time to evict
+            while  mount | grep -q foo; do 
+              echo "there are still rbds mountend. waiting another 10 seconds for them to disappear";
+              sleep 10;
+            done 
+            echo "all rbds are unmounted"
+            echo "sleep another 10 seconds to remove locks"
+            sleep 10
             exit 0
          fi
          let COUNT=COUNT+1
@@ -858,8 +852,9 @@ coreos:
 
         [Service]
         ExecStartPre=/usr/bin/mkdir -p /etc/kubernetes/manifests
+        ExecStartPre=/usr/bin/mkdir -p /var/log/containers
         ExecStartPre=/usr/bin/docker pull ceph/base
-        TimeoutStopSec=60s
+        TimeoutStopSec=180s
 
         Environment=KUBELET_VERSION={{ hyperkube_aci_tag }}
         Environment=KUBELET_ACI={{ hyperkube_aci }}
