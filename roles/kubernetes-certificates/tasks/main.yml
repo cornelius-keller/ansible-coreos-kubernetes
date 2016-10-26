@@ -3,6 +3,9 @@
 - name: create certificate directory
   local_action: file path={{ inventory_dir }}/{{ kube_cluster_name}}-kubernetes-ca state=directory
 
+- name: create certificate directory
+  local_action: file path={{ inventory_dir }}/{{ kube_cluster_name}}-kubernetes-ssh state=directory
+
 - name: create ca 
   shell: |
       cd {{ inventory_dir }}/{{ kube_cluster_name}}-kubernetes-ca
@@ -54,6 +57,15 @@
   delegate_to: localhost
   connection: local
 
+- name: generate keys to access kubelet via ssh
+  shell: |
+    cd {{ inventory_dir }}/{{ kube_cluster_name}}-kubernetes-ssh
+    ssh-keygen -b 2048 -t rsa -f id_rsa -q -N ""
+  args:
+      creates: "{{ inventory_dir }}/{{ kube_cluster_name}}-kubernetes-ssh/id_rsa"
+  delegate_to: localhost
+  connection: local
+
 - name: register kube ca
   set_fact:
     kube_ca: "{{  lookup('file', inventory_dir + '/' + kube_cluster_name + '-kubernetes-ca/ca.pem' ) }}"
@@ -63,6 +75,8 @@
     kube_worker_key: "{{  lookup('file', inventory_dir + '/' + kube_cluster_name + '-kubernetes-ca/worker-key.pem' ) }}"
     kube_worker_pem: "{{  lookup('file', inventory_dir + '/' + kube_cluster_name + '-kubernetes-ca/worker.pem' ) }}"
     kube_admin_key: "{{  lookup('file', inventory_dir + '/' + kube_cluster_name + '-kubernetes-ca/admin.pem' ) }}"
+    kubernetes_ssh_private_key: "{{  lookup('file', inventory_dir + '/' + kube_cluster_name + '-kubernetes-ssh/id_rsa' ) }}"
+    kubernetes_ssh_public_key: "{{  lookup('file', inventory_dir + '/' + kube_cluster_name + '-kubernetes-ssh/id_rsa.pub' ) }}"
 
 - name: debug
   debug: var={{ item }}

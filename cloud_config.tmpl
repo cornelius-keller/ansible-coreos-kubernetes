@@ -6,7 +6,20 @@ ssh_authorized_keys:
   - {{ key }}
   {% endfor %}
 
+users:
+  - name: kubernetes
+    ssh-authorized-keys:
+      - "{{ kubernetes_ssh_public_key }}"
+
+
+    
+
 write_files:
+  - path: /etc/kubernetes/ssh/id_rsa
+    permissions: '0600'
+    encoding: base64
+    content: |
+      {{ kubernetes_ssh_private_key|b64encode|indent(width=6)  }}
   - path: /opt/bin/ceph
     permissions: '0775'
     content: |
@@ -720,6 +733,8 @@ coreos:
         --secure-port=6443 \
         --runtime-config=extensions/v1beta1/daemonsets=true \
         --service-cluster-ip-range={{ k8s_service_ip_range }} \
+        --ssh-keyfile=/etc/kubernetes/ssh/id_rsa \
+        --ssh-user=kubernetes \
         #--token-auth-file=/srv/kubernetes/known_tokens.csv \
         #--basic-auth-file=/srv/kubernetes/basic_auth.csv \
         #--etcd-servers=http://127.0.0.1:2379 \
@@ -872,7 +887,9 @@ coreos:
           --tls-private-key-file=/etc/kubernetes/ssl/worker-key.pem \
           --register-node=true \
           --register-schedulable=true \
-          --node-status-update-frequency=2s
+          --node-status-update-frequency=2s \
+          --address=127.0.0.1 \
+          --cadvisor-port=0
         ExecStartPost=-/opt/bin/uncordon-node
         ExecStop=/opt/bin/drain-node
 
