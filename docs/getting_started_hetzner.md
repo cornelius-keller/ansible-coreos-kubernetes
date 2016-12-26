@@ -58,13 +58,12 @@
       hetzner_webservice_password=<your password>
 
 * create a uuid and key for ceph
-
-      # uuidgen
-      3867334c-2a6d-4468-b970-c878f0d36fee
-      # python ceph-key.py
-      AQCBK2FYAAAAABAAxcEwUSSPc7Zt1VJ9fjYH8A==
-
-
+```
+# uuidgen
+3867334c-2a6d-4468-b970-c878f0d36fee
+# python ceph-key.py
+AQCBK2FYAAAAABAAxcEwUSSPc7Zt1VJ9fjYH8A==
+```
 
 * add to the ceph fsid and key to the  inventory
 
