@@ -52,13 +52,16 @@
   debug:
       var: bootstrap_secrets
 
+
 - name: template bootstrap keyring secrets
-  template: src=kubernetes/ceph-bootstrap-secret.tmpl dest={{ inventory_dir}}/{{ kube_cluster_name }}-ceph/bootstrap-{{ item.item }}.yml
+  template: 
+      src: kubernetes/ceph-bootstrap-secret.tmpl
+      dest: '{{ inventory_dir}}/{{ kube_cluster_name }}-ceph/bootstrap-{{ item.item }}.yml'
   register: bootstrap
   delegate_to: localhost
   connection: local
   run_once: true
-  with_items: bootstrap_secrets.results
+  with_items: '{{ bootstrap_secrets.results }}'
 
 - name: slurp ceph.conf
   slurp:

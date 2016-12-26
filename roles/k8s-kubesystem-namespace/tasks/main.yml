@@ -22,11 +22,20 @@
   connection: local
   run_once: true
 
+- name: debug
+  debug:
+      var: item
+  with_items: '{{ system_namespace_kubectl["items"] }}'
+  changed_when: false
+  delegate_to: localhost
+  connection: local
+  run_once: true
+
 - name: check if dns-addon is already installed
   set_fact:
       k8s_system_namespace: true
-  when: item['metadata']['name'] == 'kube-system'
-  with_items: system_namespace_kubectl['items']
+  when:  item.metadata.name == "kube-system"
+  with_items: '{{ system_namespace_kubectl["items"] }}'
   changed_when: false
   delegate_to: localhost
   connection: local

@@ -23,7 +23,7 @@
   set_fact:
       node_to_label:  "{{ item }}"
   when: item['metadata']['name'] == label_node
-  with_items: label_kaubectl_output['items']
+  with_items: '{{ label_kaubectl_output["items"] }}'
   changed_when: false
   delegate_to: localhost
   connection: local

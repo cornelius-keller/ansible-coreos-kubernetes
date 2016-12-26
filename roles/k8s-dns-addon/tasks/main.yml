@@ -26,7 +26,7 @@
   set_fact:
       k8s_dns_service: true
   when: item['metadata']['name'] == 'kube-dns'
-  with_items: dns_service_kubectl['items']
+  with_items: '{{ dns_service_kubectl["items"] }}'
   changed_when: false
   delegate_to: localhost
   connection: local

@@ -26,7 +26,7 @@
   set_fact:
       k8s_resource_exists: true
   when: item['metadata']['name'] == k8s_resource_name
-  with_items: k8s_resource_kubectl['items']
+  with_items: '{{ k8s_resource_kubectl["items"] }}'
   changed_when: false
   delegate_to: localhost
   connection: local
