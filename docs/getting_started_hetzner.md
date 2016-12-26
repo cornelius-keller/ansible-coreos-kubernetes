@@ -42,9 +42,11 @@
 * copy the id of the key for use in the inventory. ![hetzer key list](hetzner_key_list.png)
 
 ## create an inventory
+```
   mkdir ../ansible-coreos-inventory 
   cp inventory-hetzner.ini.sample the ../ansible-coreos-inventory/inventory-hetzner.ini
-
+```
+ 
 * change the ips of your servers to match your server ips.
 * copy the id of your public key you uploaded to hetzner into the inventory value `rescue_authorized_key`
 * create a robot account and copy the username and password into the inventory.
@@ -66,19 +68,21 @@
 
 * add to the ceph fsid and key to the  inventory
 
-      ceph_fsid=3867334c-2a6d-4468-b970-c878f0d36fee
-      ceph_key=AQCBK2FYAAAAABAAxcEwUSSPc7Zt1VJ9fjYH8A==
+```
+ceph_fsid=3867334c-2a6d-4468-b970-c878f0d36fee
+ceph_key=AQCBK2FYAAAAABAAxcEwUSSPc7Zt1VJ9fjYH8A==
+```
 
 * add the public keys to the inventory that should have accces to the cluster:
 
-      mkdir ../ansible-coreos-inventory/group_vars
-
+      `mkdir ../ansible-coreos-inventory/group_vars`
 * add the public keys that should have access to to the cluster to the file: `../ansible-coreos-inventory/group_vars../ansible-coreos-inventory/group_vars/all.yml`
 For example:
 
-      coreos_public_keys:
-      - "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCqj5FfbBok7q8qtHqj+g5aut4eT6y78QLtC7igcGriZnbEHX9aUfpOgue+Bq1GcIXp9uSOzp+R5OrP0FzPTK9nDgm7R1wnp1zTFOF8LorcLH7ii/9p793O/bvcGNc6OaPGwzIA0naI9pumyIiArEbsnUJlWqGWchHmAm+3McN3QVxTQY6/+aW1Dt5dnC5rbvgB1lfOOhxfr19ED1zV1qgeFKkHptJ1llIkyNLyXNSiMYNuuC2pFn5F3w+Nfe+hRq8gRsJRnDuwcVibNcfR3egZ8sYyHhCWdR0HM1ZLfzW/ens37rahNEkCJrrZUYGbZ3sSDjkWoEOFk/rcdge+detV jck@jck"
-
+```
+coreos_public_keys:
+- "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCqj5FfbBok7q8qtHqj+g5aut4eT6y78QLtC7igcGriZnbEHX9aUfpOgue+Bq1GcIXp9uSOzp+R5OrP0FzPTK9nDgm7R1wnp1zTFOF8LorcLH7ii/9p793O/bvcGNc6OaPGwzIA0naI9pumyIiArEbsnUJlWqGWchHmAm+3McN3QVxTQY6/+aW1Dt5dnC5rbvgB1lfOOhxfr19ED1zV1qgeFKkHptJ1llIkyNLyXNSiMYNuuC2pFn5F3w+Nfe+hRq8gRsJRnDuwcVibNcfR3egZ8sYyHhCWdR0HM1ZLfzW/ens37rahNEkCJrrZUYGbZ3sSDjkWoEOFk/rcdge+detV jck@jck"
+```
 Your inventory shuld now look like this:
 
      [etcd-node]
@@ -141,13 +145,13 @@ You should see an output like this:
 [![asciicast](https://asciinema.org/a/3gcyoj8ddki0i5f2t9fhpjfw6.png)](https://asciinema.org/a/3gcyoj8ddki0i5f2t9fhpjfw6)
 
 Check if the bootstrap was successfull:
-    # kubectl get nodes
-    NAME            STATUS    AGE
-    176.9.118.230   Ready     9m
-    176.9.122.117   Ready     9m
-    176.9.123.237   Ready     10m
-
-
+```
+# kubectl get nodes
+NAME            STATUS    AGE
+176.9.118.230   Ready     9m
+176.9.122.117   Ready     9m
+176.9.123.237   Ready     10m
+```
 To ceck if the ceph cluster is healthy you can log into one of the nodes and issue `ceph -s`
 
     ssh core@176.9.118.230
