@@ -28,9 +28,11 @@ kubernetes-node
 
 [all:vars]
 #kube_master_dns_name=kubemaster.bettertest.de
+hyperkube_aci=quay.io/cornelius/hyperkube
+hyperkube_aci_tag=v1.4.4_coreos.0
 kube_master_ip=176.9.123.237
 kube_cluster_name=privat
-kubernetes_version=1.2.2
+kubernetes_version=1.4.4
 k8s_service_ip_range=10.100.0.0/16
 k8s_service_ip=10.100.0.1
 k8s_dns_service_ip=10.100.0.10
@@ -38,7 +40,7 @@ k8s_dns_domain=cluster.local
 hetzner_webservice_username=<hetzner_webeservice_username>
 hetzner_webservice_password=<hetzner_webservice_password>
 baremetal_provider=hetzner
-kubectl_checksum=473e6924569fba30d4a50cecdc2cae5f31d97d1f662463e85b74a472105dcff4 # used wehn downloading kubectl from the google cloud
+kubectl_checksum=1ffbcfdec9961093b5fb1eec0b65f37af71a825dafff733de90d6ed6db647729 # used wehn downloading kubectl from the google cloud
 ansible_python_interpreter=/home/core/pypy/bin/python
 ceph_fsid=<ceph_fsid> # generate with uuidgen
 ceph_key=<ceph_key>   # generate with python ceph-key.py ( in this directory )

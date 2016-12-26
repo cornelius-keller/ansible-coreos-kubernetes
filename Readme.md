@@ -8,6 +8,10 @@ CoreOs, Kubernetes, Etcd, Ceph etc. are highly complex distributed systems. Use 
 # State of this documentation:
 The documentation is very basic for now. Open sourcing this is a spare time project and so also my time to work on this and updating the documentation is limited. So please, if something is not working on the first try as you expected, take some time to dig into the playbooks etc. before opening an issue. I'll be happy to merge pull requests also if they are only improving the documentation.
 
+## Getting started:
+There is an **new** [getting started documentatinon](docs/getting_started_hetzner.md) to get started on hetzner.
+
+
 ## Features
 
 * Works with every Server provider that provides an api to boot the server in a rescue linux system over the network. For now hetzner and kimsufi (ovh) are supported.
