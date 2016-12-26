@@ -674,9 +674,11 @@ coreos:
         DHCP=ipv4
         DNS=127.0.0.1
         Domains=
+{% if hetzner_failover_ips is defined %}
 {% for ip in hetzner_failover_ips %}
         Address={{ ip }}
 {% endfor %}
+{% endif  %}
 
 
     #To use etcd2, comment out the above service and uncomment these

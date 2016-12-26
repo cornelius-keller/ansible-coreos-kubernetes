@@ -38,9 +38,9 @@
           port: 6443
           timeout: 600
   roles:
-    #    - role: kubectl
+    - role: kubectl
     - role: kubectl-config
     - role: k8s-kubesystem-namespace
     - { role: k8s-dns-addon   }
     - { role: ceph-on-kubernetes-resources, ansible_ssh_user: core, ansible_python_interpreter: /home/core/pypy/bin/python   }
-    - role: loadbalancer
+#   - role: loadbalancer
