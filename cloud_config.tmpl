@@ -874,10 +874,13 @@ coreos:
           --register-schedulable=true \
           --node-status-update-frequency=2s
         ExecStartPost=-/opt/bin/uncordon-node
+{% for port in cluster_only_ports %}
 {% for node in groups['coreos'] %}
-        ExecStartPost=/usr/sbin/iptables -A INPUT -p tcp --dport 10250 -s {{ node }}  -j ACCEPT
+        ExecStartPost=/usr/sbin/iptables -A INPUT -p tcp --dport {{ port }} -s {{ node }}  -j ACCEPT
 {% endfor %}
-        ExecStartPost=/usr/sbin/iptables -A INPUT -p tcp --dport 10250 -j DROP
+        ExecStartPost=/usr/sbin/iptables -A INPUT -p tcp --dport {{ port }} -j DROP
+{% endfor %}
+
         ExecStop=/opt/bin/drain-node
 
 
