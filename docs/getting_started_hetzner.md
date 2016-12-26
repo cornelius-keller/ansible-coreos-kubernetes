@@ -34,7 +34,7 @@
   ![hetzner key management](hetzner_key_management.png "Logo Key Managemet")
 * chooose new key, give it a name, and copy the output of
 
-     cat ~/.ssh/id_rsa.pub
+  `cat ~/.ssh/id_rsa.pub`
 
  into the form and save it.
  ![hetzner new key](hetzner_add_key.png)
@@ -42,8 +42,8 @@
 * copy the id of the key for use in the inventory. ![hetzer key list](hetzner_key_list.png)
 
 ## create an inventory
-    mkdir ../ansible-coreos-inve 
-    cp inventory-hetzner.ini.sample the ../ansible-coreos-inventory/inventory-hetzner.ini
+  mkdir ../ansible-coreos-inventory 
+  cp inventory-hetzner.ini.sample the ../ansible-coreos-inventory/inventory-hetzner.ini
 
 * change the ips of your servers to match your server ips.
 * copy the id of your public key you uploaded to hetzner into the inventory value `rescue_authorized_key`
@@ -60,9 +60,11 @@
       # uuidgen
       3867334c-2a6d-4468-b970-c878f0d36fee
       # python ceph-key.py
+      AQCBK2FYAAAAABAAxcEwUSSPc7Zt1VJ9fjYH8A==
 
 
-  add to the inventory
+
+* add to the ceph fsid and key to the  inventory
 
       ceph_fsid=3867334c-2a6d-4468-b970-c878f0d36fee
       ceph_key=AQCBK2FYAAAAABAAxcEwUSSPc7Zt1VJ9fjYH8A==
@@ -71,11 +73,11 @@
 
       mkdir ../ansible-coreos-inventory/group_vars
 
-* add the public keys to the  `../ansible-coreos-inventory/group_vars../ansible-coreos-inventory/group_vars/all.yml`
+* add the public keys that should have access to to the cluster to the file: `../ansible-coreos-inventory/group_vars../ansible-coreos-inventory/group_vars/all.yml`
 For example:
 
       coreos_public_keys:
-          - "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCqj5FfbBok7q8qtHqj+g5aut4eT6y78QLtC7igcGriZnbEHX9aUfpOgue+Bq1GcIXp9uSOzp+R5OrP0FzPTK9nDgm7R1wnp1zTFOF8LorcLH7ii/9p793O/bvcGNc6OaPGwzIA0naI9pumyIiArEbsnUJlWqGWchHmAm+3McN3QVxTQY6/+aW1Dt5dnC5rbvgB1lfOOhxfr19ED1zV1qgeFKkHptJ1llIkyNLyXNSiMYNuuC2pFn5F3w+Nfe+hRq8gRsJRnDuwcVibNcfR3egZ8sYyHhCWdR0HM1ZLfzW/ens37rahNEkCJrrZUYGbZ3sSDjkWoEOFk/rcdge+detV jck@jck"
+      - "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCqj5FfbBok7q8qtHqj+g5aut4eT6y78QLtC7igcGriZnbEHX9aUfpOgue+Bq1GcIXp9uSOzp+R5OrP0FzPTK9nDgm7R1wnp1zTFOF8LorcLH7ii/9p793O/bvcGNc6OaPGwzIA0naI9pumyIiArEbsnUJlWqGWchHmAm+3McN3QVxTQY6/+aW1Dt5dnC5rbvgB1lfOOhxfr19ED1zV1qgeFKkHptJ1llIkyNLyXNSiMYNuuC2pFn5F3w+Nfe+hRq8gRsJRnDuwcVibNcfR3egZ8sYyHhCWdR0HM1ZLfzW/ens37rahNEkCJrrZUYGbZ3sSDjkWoEOFk/rcdge+detV jck@jck"
 
 Your inventory shuld now look like this:
 
