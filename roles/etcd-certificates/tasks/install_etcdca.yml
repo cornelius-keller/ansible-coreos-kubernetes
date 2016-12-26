@@ -1,0 +1,33 @@
+---
+- name: check if it is already installed
+  local_action: "stat path=~/bin/etcd-ca"
+  register: bin_etcdca
+
+
+- name: ensure ~/bin directory exists
+  local_action: "file path=~/bin state=directory"
+  become: false
+  run_once: true
+
+- name: Detect local OS
+  local_action: "command sh -c \"uname | tr '[:upper:]' '[:lower:]'\""
+  become: false
+  register: os
+  changed_when: false
+  run_once: true
+
+- name: download binaries
+  local_action: "get_url url='https://github.com/lamielle/etcd-ca/releases/download/v0.1.0/etcd-ca_0.1.0_{{os.stdout}}_amd64.tar.gz' dest='/tmp/etcd-ca.tgz'"
+  become: false
+  when: bin_etcdca.stat.exists == false
+  run_once: true
+
+- name: unpack binaries
+  local_action: "shell tar -C ~/bin -xf /tmp/etcd-ca.tgz"
+  when: bin_etcdca.stat.exists == false
+
+- name: delte temporary files
+  local_action: "file path=/tmp/etcd-ca.tgz state=absent"
+
+
+

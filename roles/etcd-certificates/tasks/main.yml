@@ -1,4 +1,5 @@
 ---
+- include: install_etcdca.yml
 
 - name: crate ca home
   local_action: file path={{ inventory_dir }}/{{ kube_cluster_name}}-etcd-ca-keys state=directory
