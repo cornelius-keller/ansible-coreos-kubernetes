@@ -9,7 +9,7 @@ ssh_authorized_keys:
 users:
   - name: kubernetes
     ssh-authorized-keys:
-      - "{{ kubernetes_ssh_public_key }}"
+      - {{ kubernetes_ssh_public_key }}
 
 
     
@@ -20,6 +20,11 @@ write_files:
     encoding: base64
     content: |
       {{ kubernetes_ssh_private_key|b64encode|indent(width=6)  }}
+  - path: /etc/kubernetes/ssh/id_rsa.pub
+    permissions: '0600'
+    encoding: base64
+    content: |
+      {{ kubernetes_ssh_public_key|b64encode|indent(width=6)  }}
   - path: /opt/bin/ceph
     permissions: '0775'
     content: |
@@ -559,7 +564,7 @@ write_files:
           timeout server 50000ms
       backend apiserver_backend
           mode tcp
-          option ssl-hello-chk
+          #option ssl-hello-chk
           balance source
           hash-type consistent
 {% for apiserver in groups['kubernetes-master'] %}
@@ -890,16 +895,13 @@ coreos:
           --register-node=true \
           --register-schedulable=true \
           --node-status-update-frequency=2s \
-          --address=127.0.0.1 \
-          --cadvisor-port=0
+          #--address=127.0.0.1
         ExecStartPost=-/opt/bin/uncordon-node
-{% for port in cluster_only_ports %}
-{% for node in groups['coreos'] %}
-        ExecStartPost=/usr/sbin/iptables -A INPUT -p tcp --dport {{ port }} -s {{ node }}  -j ACCEPT
-{% endfor %}
-        ExecStartPost=/usr/sbin/iptables -A INPUT -p tcp --dport {{ port }} -j DROP
-{% endfor %}
-
+        {% for port in cluster_only_ports %}
+                ExecStartPost=/usr/sbin/iptables -A INPUT -p tcp --dport {{ port }} -s 127.0.0.1  -j ACCEPT
+                ExecStartPost=/usr/sbin/iptables -A INPUT -p tcp --dport {{ port }} -s {{ inventory_hostname }}  -j ACCEPT
+                ExecStartPost=/usr/sbin/iptables -A INPUT -p tcp --dport {{ port }} -j DROP
+        {% endfor %}
         ExecStop=/opt/bin/drain-node
 
 
