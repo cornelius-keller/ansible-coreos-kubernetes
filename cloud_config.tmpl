@@ -649,7 +649,8 @@ coreos:
           content: |
             [Unit]
             Requires=systemd-networkd-wait-online.service
-            After=systemd-networkd-wait-online.service
+            After=systemd-networkd-wait-online.service setup-subnet-routes.service
+            Requires=setup-subnet-routes.service
         - name: 30-certificates.conf
           content: |
             [Service]
@@ -824,9 +825,11 @@ coreos:
         [Unit]
         Description=Setup Hetzner Subnet Routes
         Documentation=https://github.com/kelseyhightower/setup-network-environment
-        Requires=docker.service
-        After=docker.service
+        Requires=early-docker.service
+        After=early-docker.service
+        Before=etcd2.service
         [Service]
+        Environment="DOCKER_HOST=unix:///var/run/early-docker.sock"
         ExecStartPre=/usr/bin/docker pull quay.io/cornelius/hetner-netconf
         ExecStart=/usr/bin/docker run --cap-add NET_ADMIN --net=host quay.io/cornelius/hetner-netconf
         RemainAfterExit=yes
