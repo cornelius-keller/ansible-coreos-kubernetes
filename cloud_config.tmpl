@@ -57,7 +57,7 @@ write_files:
     permissions: '0775'
     content: |
       #!/bin/bash
-      /opt/bin/wupiao localhost:8888
+      /opt/bin/wait-for-apiserver
       /usr/bin/docker run --rm --net=host -v /etc/kubernetes/ssl/:/etc/kubernetes/ssl/ quay.io/cornelius/hyperkube:v1.3.5_coreos.1 \
       /hyperkube kubectl --client-key=/etc/kubernetes/ssl/worker-key.pem --client-certificate=/etc/kubernetes/ssl/worker.pem \
       --server=https://127.0.0.1:8888 --certificate-authority=/etc/kubernetes/ssl/ca.pem get nodes  | grep {{ inventory_hostname }} | grep  -q SchedulingDisabled 
@@ -439,7 +439,16 @@ write_files:
          } 
        }
 
-
+  - path: /opt/bin/wait-for-apiserver
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      # [w]ait [u]ntil [p]ort [i]s [a]ctually [o]pen
+      [ -n "$1" ] && \
+        until curl -v -o /dev/null -sIf --cacert /etc/kubernetes/ssl/ca.pem --cert /etc/kubernetes/ssl/worker.pem --key /etc/kubernetes/ssl/worker-key.pem  https://localhost:8888; do \
+          sleep 1 && echo .;
+        done;
+      exit $?
   - path: /opt/bin/wupiao
     permissions: '0755'
     content: |
