@@ -40,7 +40,7 @@ write_files:
     content: |
       #!/bin/bash
       /opt/bin/wait-for-apiserver
-      /usr/bin/docker run --rm --net=host -v /etc/kubernetes/ssl/:/etc/kubernetes/ssl/ quay.io/cornelius/hyperkube:v1.3.5_coreos.1 \
+      /usr/bin/docker run --rm --net=host -v /etc/kubernetes/ssl/:/etc/kubernetes/ssl/ {{ hyperkube_aci }}:{{ hyperkube_aci_tag }} \
       /hyperkube kubectl --client-key=/etc/kubernetes/ssl/worker-key.pem --client-certificate=/etc/kubernetes/ssl/worker.pem \
       --server=https://127.0.0.1:8888 --certificate-authority=/etc/kubernetes/ssl/ca.pem get nodes  | grep {{ inventory_hostname }} | grep  -q SchedulingDisabled 
   - path: /opt/bin/uncordon-node
@@ -49,7 +49,7 @@ write_files:
       #!/bin/sh
       while /opt/bin/check-cordon
       do
-         /usr/bin/docker run --rm --net=host -v /etc/kubernetes/ssl/:/etc/kubernetes/ssl/ quay.io/cornelius/hyperkube:v1.3.5_coreos.1 \
+         /usr/bin/docker run --rm --net=host -v /etc/kubernetes/ssl/:/etc/kubernetes/ssl/ {{ hyperkube_aci }}:{{ hyperkube_aci_tag }} \
          /hyperkube kubectl --client-key=/etc/kubernetes/ssl/worker-key.pem --client-certificate=/etc/kubernetes/ssl/worker.pem \
          --server=https://127.0.0.1:8888 --certificate-authority=/etc/kubernetes/ssl/ca.pem uncordon {{ inventory_hostname }} || true
       done
@@ -63,7 +63,7 @@ write_files:
       MAX_TRIES=4 
       COUNT=0
       while [  $COUNT -lt $MAX_TRIES ]; do
-         /usr/bin/docker run --rm --net=host -v /etc/kubernetes/ssl/:/etc/kubernetes/ssl/ quay.io/cornelius/hyperkube:v1.3.5_coreos.1 /hyperkube kubectl --client-key=/etc/kubernetes/ssl/worker-key.pem --client-certificate=/etc/kubernetes/ssl/worker.pem --server=https://127.0.0.1:8888 --certificate-authority=/etc/kubernetes/ssl/ca.pem drain {{ inventory_hostname }} --ignore-daemonsets=true --force --delete-local-data
+         /usr/bin/docker run --rm --net=host -v /etc/kubernetes/ssl/:/etc/kubernetes/ssl/ {{ hyperkube_aci }}:{{ hyperkube_aci_tag }} /hyperkube kubectl --client-key=/etc/kubernetes/ssl/worker-key.pem --client-certificate=/etc/kubernetes/ssl/worker.pem --server=https://127.0.0.1:8888 --certificate-authority=/etc/kubernetes/ssl/ca.pem drain {{ inventory_hostname }} --ignore-daemonsets=true --force --delete-local-data
          if [ $? -eq 0 ];then
             while  mount | grep -q foo; do 
               echo "there are still rbds mountend. waiting another 10 seconds for them to disappear";
@@ -309,7 +309,7 @@ write_files:
 #            nodeName: "{{ inventory_hostname }}"
 #            containers:
 #            - name: kube-proxy
-#              image: quay.io/cornelius/hyperkube:v1.3.5_coreos.1
+#              image: {{ hyperkube_aci }}:{{ hyperkube_aci_tag }}
 #              command:
 #              - /hyperkube
 #              - proxy
@@ -556,7 +556,6 @@ write_files:
           timeout server 50000ms
       backend apiserver_backend
           mode tcp
-          option ssl-hello-chk
           balance source
           hash-type consistent
 {% for apiserver in groups['kubernetes-master'] %}
