@@ -1,0 +1,61 @@
+---
+# etcd-ca export --insecure --passphrase '' | sed -e 's/.*-----BEGIN\(.*\)/-----BEGIN\1/' | openssl pkey -out key.pem
+# etcd-ca export --insecure --passphrase '' | sed -e 's/.*-----BEGIN\(.*\)/-----BEGIN\1/' | openssl x509  -out caextracted.pem
+
+- block:
+  - name: create etcd-cfssl ca authoritority
+    file:
+      path: '{{ inventory_dir }}/{{ kube_cluster_name }}-etcd-ca-cfssl'
+      state: directory
+  - name: check if there is an old etcdca 
+    stat: 
+       path: '{{ inventory_dir }}/{{ kube_cluster_name}}-etcd-ca-keys/.etcd-ca/ca.crt'
+    register: old_ca
+  - name: copy legacy ca if it exists
+    shell: |
+        cd {{ inventory_dir }}/{{ kube_cluster_name}}-etcd-ca-keys/
+        etcd-ca export --insecure --passphrase '' | sed -e 's/.*-----BEGIN\(.*\)/-----BEGIN\1/' | openssl pkey -out {{ inventory_dir }}/{{ kube_cluster_name }}-etcd-ca-cfssl/ca-key.pem
+        etcd-ca export --insecure --passphrase '' | sed -e 's/.*-----BEGIN\(.*\)/-----BEGIN\1/' | openssl x509  -out {{ inventory_dir }}/{{ kube_cluster_name }}-etcd-ca-cfssl/ca.pem
+    args:
+      creates: '{{ inventory_dir }}/{{ kube_cluster_name }}-etcd-ca-cfssl/ca.pem'
+    when: old_ca.stat.exists
+  
+  - name: Create ca
+    shell: |
+      cd {{ inventory_dir }}/{{ kube_cluster_name }}-etcd-ca-cfssl
+      echo '{"CN":"CA","key":{"algo":"rsa","size":2048}}' | cfssl gencert -initca - | cfssljson -bare ca -A
+    args:
+      creates: '{{ inventory_dir }}/{{ kube_cluster_name }}-etcd-ca-cfssl/ca.pem'
+  
+  - name: Create ca conifg
+    shell: |
+      cd {{ inventory_dir }}/{{ kube_cluster_name }}-etcd-ca-cfssl
+      pwd
+      echo '{"signing":{"default":{"expiry":"43800h","usages":["signing","key encipherment","server auth","client auth"]}}}' > ca-config.json
+    args:
+      creates: '{{ inventory_dir }}/{{ kube_cluster_name }}-etcd-ca-cfssl/ca-config.json'
+  
+  - name: Create server sertificate
+    shell: |
+      cd {{ inventory_dir }}/{{ kube_cluster_name }}-etcd-ca-cfssl
+      echo '{"CN":"'{{ coreos_hostname }}'","hosts":[""],"key":{"algo":"rsa","size":2048}}' | cfssl gencert -config=ca-config.json -ca=ca.pem -ca-key=ca-key.pem -hostname="{{ inventory_hostname }}" - | cfssljson -bare {{ coreos_hostname }}
+    args:
+      creates: '{{ inventory_dir }}/{{ kube_cluster_name }}-etcd-ca-cfssl/{{ coreos_hostname }}.pem'
+  
+  - name: Create client certificate
+    shell: |
+      cd {{ inventory_dir }}/{{ kube_cluster_name }}-etcd-ca-cfssl
+      echo '{"CN":"'client'","hosts":[""],"key":{"algo":"rsa","size":2048}}' | cfssl gencert -config=ca-config.json -ca=ca.pem -ca-key=ca-key.pem -hostname="" - | cfssljson -bare client
+    args:
+      creates: '{{ inventory_dir }}/{{ kube_cluster_name }}-etcd-ca-cfssl/client.pem'
+  connection: local
+  delegate_to: localhost
+
+- name: set_ca_fcts
+  set_fact:
+      etcd_ca_certificate:  "{{ lookup('file', inventory_dir + '/' + kube_cluster_name +  '-etcd-ca-cfssl/ca.pem') }}"
+      etcd_cert:    "{{ lookup('file', inventory_dir + '/' + kube_cluster_name +  '-etcd-ca-cfssl/' + coreos_hostname + '.pem') }}"
+      etcd_key: "{{ lookup('file', inventory_dir + '/' + kube_cluster_name +  '-etcd-ca-cfssl/' + coreos_hostname + '-key.pem') }}"
+      etcd_client_cert: "{{ lookup('file', inventory_dir + '/' + kube_cluster_name +  '-etcd-ca-cfssl/client.pem') }}"
+      etcd_client_key: "{{ lookup('file', inventory_dir + '/' + kube_cluster_name +  '-etcd-ca-cfssl/client-key.pem') }}"
+

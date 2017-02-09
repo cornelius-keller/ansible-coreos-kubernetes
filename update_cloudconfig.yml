@@ -7,7 +7,8 @@
 
   roles:
     - role: kubectl
-    - role: etcd-certificates
+    #- role: etcd-certificates
+    - role: etcd-certs-cfssl
     - role: kubernetes-certificates
     - role: kubectl-config
     - role: extra-cas
