@@ -14,13 +14,14 @@
   gather_facts: no
 
   roles:
-    - role: etcd-certificates
+    #- role: etcd-certificates
     - role: etcd-certs-cfssl
-    #- role: extra-cas
+    - role: extra-cas
     - { role: install-coreos,  ansible_python_interpreter: /usr/bin/python }
     - role: kubernetes-certificates
     - role: ceph-on-kubernetes-config
     - { role: ansible-coreos-bootstrap, ansible_ssh_user: core   }
+    - calico
     - { role: cloud-config, clear_etcd_data: true, ansible_ssh_user: core  }
     - { role: unsafe_reboot, unsafe_reboot_dealay: 1, ansible_ssh_user: core }
 
