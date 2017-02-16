@@ -7,6 +7,26 @@ ssh_authorized_keys:
   {% endfor %}
 
 write_files:
+  - path: /etc/kubernetes/cni/docker_opts_cni.env
+    content: |
+      DOCKER_OPT_BIP=""
+       DOCKER_OPT_IPMASQ=""
+  - path: /etc/kubernetes/cni/net.d/10-flannel.conf
+    content: |
+      {
+      "name": "podnet",
+      "type": "flannel",
+      "delegate": {
+          "bridge": "cni0",
+          "isDefaultGateway": true
+        }
+      }
+  - path: /etc/kubernetes/cni/net.d/99-loopback.conf
+    content: |
+      {
+        "type": "loopback"
+      }
+
   - path: /opt/bin/ceph
     permissions: '0775'
     content: |
@@ -124,6 +144,10 @@ write_files:
         ${KUBELET_ACI}:${KUBELET_VERSION} --exec=/${EXEC} -- "$@"
 
   {%if inventory_hostname in groups['kubernetes-master'] or  inventory_hostname in groups['kubernetes-node'] %}
+
+  - path: /etc/kubernetes/manifests/calico.yml
+    content: |
+      {{ calico_resource_file|indent(width=6) }}
 
   - path: /etc/kubernetes/ssl/ca.pem
     content: |
@@ -530,7 +554,14 @@ write_files:
     permissions: 0644
     content: |
       {{ etcd_key|indent(width=6) }}
-  
+  - path: /etc/ssl/etcd/client-key.pem
+    permissions: 0644
+    content: |
+      {{ etcd_client_key|indent(width=6) }}
+  - path: /etc/ssl/etcd/client-cert.pem
+    permissions: 0644
+    content: |
+      {{ etcd_client_cert|indent(width=6) }}
   - path: /etc/ceph/ceph.conf
     content: {{ ceph_conf.content }}
     encoding: base64
@@ -664,6 +695,16 @@ coreos:
         RemainAfterExit=yes
         Type=oneshot
 
+    - name: install_cni_binaris.service
+      command: start
+      content: |
+        [Unit]
+        Before=kube-kublet.service
+        [Service]
+        ExecStartPre=/usr/bin/mkdir -p /opt/cni/bin
+        ExecStart=/usr/bin/bash -c "/usr/bin/wget -O - -o /dev/null  https://github.com/containernetworking/cni/releases/download/v0.4.0/cni-amd64-v0.4.0.tbz2 | tar -xjv -C /opt/cni/bin/"
+        RemainAfterExit=yes
+        Type=oneshot
 
     - name: docker.service
       command: start
@@ -672,10 +713,9 @@ coreos:
           content: |
             [Unit]
             Requires=flanneld.service
-            Wants=flanneld.service
             After=flanneld.service
             [Service]
-            EnvironmentFile=/run/flannel/flannel_docker_opts.env
+            EnvironmentFile=/etc/kubernetes/cni/docker_opts_cni.env
 
     - name: 00-wired.network
       runtime: true
@@ -691,6 +731,27 @@ coreos:
         Address={{ ip }}
 {% endfor %}
 {% endif  %}
+
+    - name: 10-cni.netdev
+      runtime: true
+      content: |
+        [NetDev]
+        Name=cni0
+        Kind=bridge
+    - name: 30-tinc.network
+      runtime: true
+      content: |
+        [Match]
+        Name=tap0
+        [Network]
+        Bridge=cni0
+    - name: 30-cni.network
+      runtime: true
+      content: |
+        [Match]
+        Name=cni0
+        [Route]
+        Destination=10.1.0.0/16
 
 
     #To use etcd2, comment out the above service and uncomment these
@@ -867,6 +928,7 @@ coreos:
         Requires=kubernetes-networking.target docker.service
 
         [Service]
+        ExecStartPre=/usr/bin/mkdir -p /opt/cni/bin
         ExecStartPre=/usr/bin/mkdir -p /etc/kubernetes/manifests
         ExecStartPre=/usr/bin/mkdir -p /var/log/containers
         ExecStartPre=/usr/bin/docker pull ceph/base
@@ -874,14 +936,21 @@ coreos:
 
         Environment=KUBELET_VERSION={{ hyperkube_aci_tag }}
         Environment=KUBELET_ACI={{ hyperkube_aci }}
-        Environment="RKT_OPTS=--volume=ceph,kind=host,source=/etc/ceph/ --mount volume=ceph,target=/etc/ceph/ --volume=modules,kind=host,source=/lib/modules/ --mount volume=modules,target=/lib/modules/ --volume resolv-conf,kind=host,source=/etc/resolv.conf --mount volume=resolv-conf,target=/etc/resolv.conf --volume var-log-containers,kind=host,source=/var/log/containers/ --mount volume=var-log-containers,target=/var/log/containers/"
+        Environment="RKT_OPTS=--volume=ceph,kind=host,source=/etc/ceph/ --mount volume=ceph,target=/etc/ceph/ \
+          --volume=modules,kind=host,source=/lib/modules/ --mount volume=modules,target=/lib/modules/ \
+          --volume resolv-conf,kind=host,source=/etc/resolv.conf --mount volume=resolv-conf,target=/etc/resolv.conf \
+          --volume etcd-ca,kind=host,source=/etc/ssl/etcd/ --mount volume=etcd-ca,target=/etc/ssl/etcd/ \
+          --volume var-log-containers,kind=host,source=/var/log/containers/ --mount volume=var-log-containers,target=/var/log/containers/ \
+          --volume cni-bin,kind=host,source=/opt/cni/bin  --mount volume=cni-bin,target=/opt/cni/bin"
         #--volume sys,kind=host,source=/sys --mount volume=sys,target=/sys --volume dev,kind=host,source=/dev --mount volume=dev,target=/dev"
         ExecStart=/usr/lib/coreos/kubelet-wrapper \
           --api-servers=https://127.0.0.1:8888 \
           --allow-privileged=true \
-          --config=/etc/kubernetes/manifests \
+          --pod-manifest-path=/etc/kubernetes/manifests \
+          --cni-conf-dir=/etc/kubernetes/cni/net.d \
           --cluster-dns={{ k8s_dns_service_ip }} \
           --cluster-domain={{ k8s_dns_domain }} \
+          --network-plugin=cni \
           --hostname-override={{ inventory_hostname }} \
           --kubeconfig=/etc/kubernetes/worker-kubeconfig.yaml \
           --tls-cert-file=/etc/kubernetes/ssl/worker.pem \
@@ -911,7 +980,7 @@ coreos:
       content: |
          [Unit]
          Description=Ha Proxy for kubernetes api server
-         After=docker.service
+         After=early-docker.service
          Before=kubernetes-networking.target
 
          [Service]
@@ -1002,7 +1071,7 @@ coreos:
       content: |
         [Unit]
         Description=dnsmask service
-        Requires=docker.service
+        Requires=early-docker.service
         Before=kubernetes-networking.target
 
         [Install]
@@ -1104,22 +1173,23 @@ coreos:
             ExecStartPre=/usr/bin/ln -sf /etc/flannel/options.env /run/flannel/options.env
 
 
-    - name: docker-bridge.service
+    - name: cni-bridge.service
       command: start
       enable: true
       content: |
         [Unit]
-        Description=Configure Docker Bridge
-        Requires=docker.service
+        Description=Configure CNI bridge
+        Requires=flanneld.service
+        After=flanneld.service
         #After=docker.socket
         [Service]
+        EnvironmentFile=/run/flannel/subnet.env
         Type=oneshot
         #ExecStartPre=-/bin/sh -c "route del -net 10.1.0.0 netmask 255.255.0.0 dev tap0"
-        ExecStartPre=/bin/sh -c "while ! ifconfig -s | grep -q tap0 ; do  sleep 1; done"
-        ExecStartPre=/bin/sh -c "while ! ifconfig -s | grep -q docker0 ; do  sleep 1; done"
-        ExecStartPre=/bin/sh -c "route add -net 10.1.0.0 netmask 255.255.0.0 dev docker0"
+        ExecStartPre=/bin/sh -c "while ! ifconfig -s | grep -q cni0 ; do  sleep 1; done"
+        ExecStart=/usr/bin/ip addr add $FLANNEL_SUBNET dev cni0
         #ExecStartPre=-/bin/sh -c "brctl delif docker0 tap0"
-        ExecStart=/bin/sh -c "brctl addif docker0 tap0"
+        #ExecStart=/bin/sh -c "brctl addif docker0 tap0"
 
     - name: fleet.service
       command: start
