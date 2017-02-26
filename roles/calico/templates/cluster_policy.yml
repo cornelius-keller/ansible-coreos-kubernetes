@@ -1,0 +1,21 @@
+- apiVersion: v1
+  kind: policy
+  metadata:
+    name: cluster
+  spec:
+    selector: "role == 'node'"
+    order: 1
+    ingress:
+    - action: allow
+      protocol: tcp
+      destination:
+        ports: [22]
+    - action: allow
+      protocol: tcp
+      source:
+        selector: "role == 'node'"
+      destination:
+        ports: 
+        - 10250
+        - 9100
+        - 4191

@@ -1,0 +1,57 @@
+---
+- block:
+
+  - name: create callico dir
+    file: 
+      path: '{{ inventory_dir }}/{{ kube_cluster_name }}-calico/'
+      #path: /etc/kubernetes/manifests/
+      state: directory
+  - name: create callico dir
+    file: 
+      path: '{{ inventory_dir }}/{{ kube_cluster_name }}-calico/manifests'
+      #path: /etc/kubernetes/manifests/
+      state: directory
+  
+  - name: template calico resorce
+    template:
+        src: calico.yml.tmpl
+        dest: '{{ inventory_dir }}/{{ kube_cluster_name }}-calico/calico.yml'
+        #dest: /etc/kubernetes/manifests/calico.ymĺ
+  - include: ../k8s-resource/tasks/main.yml
+    vars:
+        k8s_resource_kind: DaemonSet
+        k8s_resource_name: calico-node
+        k8s_resource_namespace: kube-system
+        k8s_resource_file: '{{ inventory_dir }}/{{ kube_cluster_name }}-calico/calico.yml'
+
+  - name: failsafe policy
+    template:
+      src: failsafe_policy.yml
+      dest: '{{  inventory_dir }}/{{ kube_cluster_name }}-calico/manifests/failsafe_policy.yml'
+  - name: failsafe policy
+    template:
+      src: cluster_policy.yml
+      dest: '{{  inventory_dir }}/{{ kube_cluster_name }}-calico/manifests/cluster_policy.yml'
+  - name: host endpoint
+    template:
+      src: host_endpoint.yml.tmpl
+      dest: '{{ inventory_dir }}/{{ kube_cluster_name }}-calico/manifests/{{ coreos_hostname }}.yml'
+  - name: read generated config into variable
+    set_fact:
+        calico_resource_file: "{{ lookup('file', inventory_dir + '/' + kube_cluster_name +  '-calico/calico.yml') }}"
+  - name: create resources 
+    shell: |
+        cd {{ inventory_dir }}/{{ kube_cluster_name }}-calico/
+        . calico.env
+        calicoctl apply -f {{ item }}
+    args:
+        executable: /bin/bash
+    with_items:
+        - manifests/failsafe_policy.yml
+        - manifests/cluster_policy.yml
+        - manifests/{{ coreos_hostname }}.yml
+  connection: local
+  delegate_to: localhost
+
+
+

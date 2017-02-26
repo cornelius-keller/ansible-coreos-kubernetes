@@ -10,7 +10,8 @@ subjectAltName = @alt_names
 DNS.1 = kubernetes
 DNS.2 = kubernetes.default
 DNS.3 = kubernetes.default.svc
-DNS.4 = localhost
+DNS.4 = kubernetes.default.svc.cluster.local
+DNS.5 = localhost
 {% if kube_master_dns_name is defined %}DNS.5 = {{ kube_master_dns_name }}{% endif %}
 
 IP.1 = {{ k8s_service_ip }}

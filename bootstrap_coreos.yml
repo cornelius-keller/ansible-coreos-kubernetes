@@ -21,7 +21,6 @@
     - role: kubernetes-certificates
     - role: ceph-on-kubernetes-config
     - { role: ansible-coreos-bootstrap, ansible_ssh_user: core   }
-    - calico
     - { role: cloud-config, clear_etcd_data: true, ansible_ssh_user: core  }
     - { role: unsafe_reboot, unsafe_reboot_dealay: 1, ansible_ssh_user: core }
 
@@ -43,6 +42,7 @@
     - role: kubectl
     - role: kubectl-config
     - role: k8s-kubesystem-namespace
+    - role: calico
     - { role: k8s-dns-addon   }
     - { role: ceph-on-kubernetes-resources, ansible_ssh_user: core, ansible_python_interpreter: /home/core/pypy/bin/python   }
 #   - role: loadbalancer

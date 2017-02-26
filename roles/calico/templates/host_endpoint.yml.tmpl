@@ -1,0 +1,11 @@
+- apiVersion: v1
+  kind: hostEndpoint
+  metadata:
+    name: {{ coreos_hostname }}
+    node: {{ coreos_hostname }}
+    labels:
+      role: node
+      environment: production
+  spec:
+    expectedIPs: 
+        - {{ inventory_hostname }}

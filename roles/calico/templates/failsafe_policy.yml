@@ -1,0 +1,43 @@
+- apiVersion: v1
+  kind: policy
+  metadata:
+    name: failsafe
+  spec:
+    selector: "role == 'node'"
+    order: 0
+    ingress:
+    - action: allow
+      protocol: tcp
+      destination:
+        ports: [22]
+    - action: allow
+      protocol: icmp
+    - action: allow
+      protocol: tcp
+      destination:
+        ports: [2379, 2380]
+    - action: allow
+      protocol: tcp
+      destination:
+        ports: 
+        - 6443
+    egress:
+    - action: allow
+      protocol: tcp
+      destination:
+        ports: [2379, 2380]
+    - action: allow
+      protocol: udp
+      destination:
+        ports: [67,68]
+    - action: allow
+      protocol: udp
+      destination:
+        ports: [53]
+    - action: allow
+      protocol: tcp
+      destination:
+        ports: [80,443]
+    - action: allow
+    - action: allow
+      protocol: icmp
