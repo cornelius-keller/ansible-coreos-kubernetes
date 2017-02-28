@@ -6,7 +6,7 @@ metadata:
   namespace: kube-system
 data:
   # Configure this with the location of your etcd cluster.
-  etcd_endpoints: "https://176.9.123.237:2379,https://176.9.122.117:2379,https://176.9.118.230:2379"
+  etcd_endpoints: "{% for host in groups['etcd-node'] %}https://{{host}}:2379{%if not loop.last %},{% endif %}{% endfor %}"
 
   # Configure the Calico backend to use.
   calico_backend: "none"
