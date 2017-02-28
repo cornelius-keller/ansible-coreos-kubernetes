@@ -816,8 +816,8 @@ coreos:
         [Unit]
         Description=Setup Hetzner Subnet Routes
         Documentation=https://github.com/kelseyhightower/setup-network-environment
-        Requires=early-docker.service
-        After=early-docker.service
+        Requires=early-docker.service network-online.target
+        After=early-docker.service network-online.target
         Before=etcd2.service
         [Service]
         Environment="DOCKER_HOST=unix:///var/run/early-docker.sock"
