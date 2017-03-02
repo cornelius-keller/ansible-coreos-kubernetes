@@ -447,7 +447,6 @@ write_files:
     owner: root
     content: |
       #!/bin/sh
-      export DOCKER_HOST=unix:///var/run/early-docker.sock
       . /etc/tinc-env
       for host in `etcdctl ls /services/tinc/ | sed -e 's/\/services\/tinc\///'`; do
         if [ "$TINC_HOSTNAME" != "$host" ]; then
@@ -455,7 +454,8 @@ write_files:
           etcdctl get /services/tinc/$host | sed -e 's/\"//g' > /srv/tinc/hosts/$host
         fi
       done
-      docker exec tinc /usr/sbin/tinc reload
+      #docker exec tinc /usr/sbin/tinc reload
+      rkt enter $(cat /srv/tinc/tinc.uuid )  /usr/sbin/tinc reload
   - path: /etc/environment
     permissions: 0774
     owner: root
@@ -486,7 +486,7 @@ write_files:
     owner: root
     content: |
       #!/bin/sh
-      export DOCKER_HOST=unix:///var/run/early-docker.sock
+      #export DOCKER_HOST=unix:///var/run/early-docker.sock
       . /etc/tinc-env
       host=${ETCD_WATCH_KEY/\/services\/tinc\//}
       #echo "host is $host"
@@ -512,7 +512,8 @@ write_files:
           echo "removing tinc host $host"
           docker run --rm --volume /srv/tinc:/etc/tinc  jenserat/tinc del ConnectTo = $host
           rm -f /srv/tinc/hosts/$host
-          docker exec tinc /usr/sbin/tinc reload
+          #docker exec tinc /usr/sbin/tinc reload
+          rkt enter $(cat /srv/tinc/uuid )  /usr/sbin/tinc reload
           echo "done"
         fi
       fi
@@ -658,7 +659,7 @@ coreos:
       command: start
       content: |
         [Unit]
-        Before=early-docker.service
+        Before=docker.service
         [Service]
         ExecStart=/usr/sbin/update-ca-certificates
         RemainAfterExit=yes
@@ -815,14 +816,12 @@ coreos:
       content: |
         [Unit]
         Description=Setup Hetzner Subnet Routes
-        Documentation=https://github.com/kelseyhightower/setup-network-environment
-        Requires=early-docker.service network-online.target
-        After=early-docker.service network-online.target
+        Requires=network-online.target
+        After=network-online.target
         Before=etcd2.service
         [Service]
-        Environment="DOCKER_HOST=unix:///var/run/early-docker.sock"
         ExecStartPre=/usr/bin/docker pull quay.io/cornelius/hetner-netconf
-        ExecStart=/usr/bin/docker run --cap-add NET_ADMIN --net=host quay.io/cornelius/hetner-netconf
+        ExecStart=rkt run  --trust-keys-from-https --net=host  quay.io/cornelius/hetner-netconf --caps-retain=CAP_NET_ADMIN
         RemainAfterExit=yes
         Type=oneshot
     - name: kube-proxy.service
@@ -927,17 +926,14 @@ coreos:
 
 {% endif %}
 
-    - name: early-docker.service
-      command: start
-      enable: true
     - name: tinc-env.service
       enable: true
       command: start
       content: |
         [Unit]
         Description=Tinc Service
-        After=etcd.service etcd2.service early-docker.service flanneld.service
-        Before=early-docker.target fleet.service
+        After=etcd.service etcd2.servic flanneld.service
+        Before=fleet.service
         
         [Service]
         Type=oneshot
@@ -950,8 +946,7 @@ coreos:
         [Unit]
         Description=Wait For Flannel
         Requires=flanneld.service
-        After=etcd.service etcd2.service early-docker.service flanneld.service
-        Before=early-docker.target
+        After=etcd.service etcd2.service flanneld.service
 
         [Service]
         Type=oneshot
@@ -983,8 +978,8 @@ coreos:
       content: |
         [Unit]
         Description=Tinc Configuration Service
-        After=etcd.service etcd2.service early-docker.service flanneld.service
-        Before=early-docker.target fleet.service
+        After=etcd.service etcd2.service flanneld.service
+        Before=fleet.service
 
         [Service]
         Type=oneshot
@@ -1025,20 +1020,21 @@ coreos:
         [Unit]
         Description=Tinc VPN Service
         Requires=flannel-wait.service
-        After=early-docker.service flanneld.service tinc-env.service flannel-wait.service 
+        After=flanneld.service tinc-env.service flannel-wait.service 
         Before=kubernetes-networking.target tinc-config-updater.service
 
         [Install]
         WantedBy=kubernetes-networking.target
 
         [Service]
-        Environment="DOCKER_HOST=unix:///var/run/early-docker.sock"
+        #Environment="DOCKER_HOST=unix:///var/run/early-docker.sock"
         EnvironmentFile=/etc/tinc-env
 
         EnvironmentFile=/etc/environment
 
 
-        ExecStartPre=/usr/bin/docker pull jenserat/tinc
+        #ExecStartPre=/usr/bin/docker pull jenserat/tinc
+        ExecStartPre=/usr/bin/rkt --insecure-options=image fetch docker://jenserat/tinc
         ExecStartPre=/usr/bin/rm -rf /srv/tinc
         ExecStartPre=/usr/bin/mkdir -p /srv/tinc
         ExecStartPre=/bin/sh -c "/usr/bin/docker run --rm --volume /srv/tinc:/etc/tinc  jenserat/tinc init $TINC_HOSTNAME"
@@ -1048,12 +1044,18 @@ coreos:
         ExecStartPre=/bin/sh -c "/usr/bin/docker run --rm --volume /srv/tinc:/etc/tinc  jenserat/tinc add Subnet = `echo $FLANNEL_SUBNET | sed -e 's/1\\/24/0\\/24/'`"
         ExecStartPre=/bin/sh -c "/usr/bin/docker run --rm --volume /srv/tinc:/etc/tinc  jenserat/tinc add Mode = switch"
         ExecStartPre=/bin/sh -c "/usr/bin/docker run --rm --volume /srv/tinc:/etc/tinc  jenserat/tinc add DeviceType = tap"
-        ExecStartPre=-/usr/bin/docker rm -f tinc 
-        ExecStartPre=/usr/bin/docker run --name tinc  -d --volume /srv/tinc:/etc/tinc --net=host --device=/dev/net/tun --cap-add NET_ADMIN jenserat/tinc start  -D
+        #ExecStartPre=-/usr/bin/docker rm -f tinc 
+        ExecStartPre=-/usr/bin/rkt stop --uuid-file=/srv/tinc/tinc.uuid
+        ExecStartPre=/usr/bin/rkt  --uuid-file=/srv/tinc/tinc.uuid  --volume tinc,kind=host,source=/srv/tinc,readOnly=false --mount volume=tinc,target=/etc/tinc \
+                     --volume tun,kind=host,source=/dev/net/tun,readOnly=false --mount volume=tun,target=/dev/net/tun \
+                     --insecure-options=image jenserat/tinc 
+                      jenserat/tinc  --caps-retain=CAP_NET_ADMIN start  -D
+        #ExecStartPre=/usr/bin/docker run --name tinc  -d --volume /srv/tinc:/etc/tinc --net=host --device=/dev/net/tun --cap-add NET_ADMIN jenserat/tinc start  -D
 
         ExecStart=/bin/sh -c "while true; do etcdctl set /services/tinc/$TINC_HOSTNAME  \"\\\"` cat /srv/tinc/hosts/$TINC_HOSTNAME `\"\\\" --ttl 60;sleep 45;done"
 
-        ExecStop=/usr/bin/docker rm -f tinc
+        #ExecStop=/usr/bin/docker rm -f tinc
+        ExecStop=-/usr/bin/rkt stop --uuid-file=/srv/tinc/tinc.uuid
         ExecStopPost=/bin/sh -c  "etcdctl rm /services/tinc/$TINC_HOSTNAME"
 
     - name: tinc-config-updater.service
