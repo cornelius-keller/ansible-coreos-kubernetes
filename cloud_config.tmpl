@@ -450,12 +450,13 @@ write_files:
       . /etc/tinc-env
       for host in `etcdctl ls /services/tinc/ | sed -e 's/\/services\/tinc\///'`; do
         if [ "$TINC_HOSTNAME" != "$host" ]; then
-          docker run --rm --volume /srv/tinc:/etc/tinc  jenserat/tinc add ConnectTo = $host
+          #docker run --rm --volume /srv/tinc:/etc/tinc  jenserat/tinc add ConnectTo = $host
+          /usr/bin/rkt run --volume tinc,kind=host,source=/srv/tinc,readOnly=false --mount volume=tinc,target=/etc/tinc docker://jenserat/tinc --exec=/usr/sbin/tinc -- add ConnectTo = $host
           etcdctl get /services/tinc/$host | sed -e 's/\"//g' > /srv/tinc/hosts/$host
         fi
       done
       #docker exec tinc /usr/sbin/tinc reload
-      rkt enter $(cat /srv/tinc/tinc.uuid )  /usr/sbin/tinc reload
+      rkt enter $(cat /srv/tinc/tinc.uuid ) /usr/sbin/tinc reload
   - path: /etc/environment
     permissions: 0774
     owner: root
@@ -499,10 +500,11 @@ write_files:
             current_value="$( cat /srv/tinc/hosts/$host )"
           fi
           if [ "$ETCD_WATCH_VALUE" != "\"$current_value\"" ]; then
-            docker run --rm --volume /srv/tinc:/etc/tinc  jenserat/tinc add ConnectTo = $host
+            /usr/bin/rkt run --volume tinc,kind=host,source=/srv/tinc,readOnly=false --mount volume=tinc,target=/etc/tinc docker://jenserat/tinc --exec=/usr/sbin/tinc -- add ConnectTo = $host
             #etcdctl get /services/tinc/$host | sed -e 's/\"//g' > /srv/tinc/hosts/$host
             echo  "$ETCD_WATCH_VALUE" | sed -e 's/\"//g' > /srv/tinc/hosts/$host
-            docker exec tinc /usr/sbin/tinc reload
+            rkt enter $(cat /srv/tinc/tinc.uuid )  /usr/sbin/tinc reload
+            #docker exec tinc /usr/sbin/tinc reload
             echo "done"
           else
            echo "old value = new value; nothing to do"
@@ -510,10 +512,9 @@ write_files:
         fi
         if [ "$ETCD_WATCH_ACTION" = "delete" ] || [ "$ETCD_WATCH_ACTION" = "expire" ]; then
           echo "removing tinc host $host"
-          docker run --rm --volume /srv/tinc:/etc/tinc  jenserat/tinc del ConnectTo = $host
+          /usr/bin/rkt run  --volume tinc,kind=host,source=/srv/tinc,readOnly=false --mount volume=tinc,target=/etc/tinc docker://jenserat/tinc --exec=/usr/sbin/tinc -- del ConnectTo = $host
           rm -f /srv/tinc/hosts/$host
-          #docker exec tinc /usr/sbin/tinc reload
-          rkt enter $(cat /srv/tinc/uuid )  /usr/sbin/tinc reload
+          rkt enter $(cat /srv/tinc/tinc.uuid )  /usr/sbin/tinc reload
           echo "done"
         fi
       fi
@@ -820,8 +821,8 @@ coreos:
         After=network-online.target
         Before=etcd2.service
         [Service]
-        ExecStartPre=/usr/bin/docker pull quay.io/cornelius/hetner-netconf
-        ExecStart=rkt run  --trust-keys-from-https --net=host  quay.io/cornelius/hetner-netconf --caps-retain=CAP_NET_ADMIN
+        ExecStartPre=/usr/bin/rkt fetch --insecure-options=image docker://quay.io/cornelius/hetner-netconf
+        ExecStart=/usr/bin/rkt run  --trust-keys-from-https --net=host  quay.io/cornelius/hetner-netconf --caps-retain=CAP_NET_ADMIN
         RemainAfterExit=yes
         Type=oneshot
     - name: kube-proxy.service
@@ -1028,6 +1029,7 @@ coreos:
 
         [Service]
         #Environment="DOCKER_HOST=unix:///var/run/early-docker.sock"
+
         EnvironmentFile=/etc/tinc-env
 
         EnvironmentFile=/etc/environment
@@ -1037,19 +1039,19 @@ coreos:
         ExecStartPre=/usr/bin/rkt --insecure-options=image fetch docker://jenserat/tinc
         ExecStartPre=/usr/bin/rm -rf /srv/tinc
         ExecStartPre=/usr/bin/mkdir -p /srv/tinc
-        ExecStartPre=/bin/sh -c "/usr/bin/docker run --rm --volume /srv/tinc:/etc/tinc  jenserat/tinc init $TINC_HOSTNAME"
-        ExecStartPre=/bin/sh -c "/usr/bin/docker run --rm --volume /srv/tinc:/etc/tinc  jenserat/tinc add Address = $COREOS_PUBLIC_IPV4"
+        ExecStartPre=/bin/sh -c "/usr/bin/rkt run  --volume tinc,kind=host,source=/srv/tinc,readOnly=false --mount volume=tinc,target=/etc/tinc docker://jenserat/tinc --exec=/usr/sbin/tinc -- init $TINC_HOSTNAME"
+        ExecStartPre=/bin/sh -c "/usr/bin/rkt run  --volume tinc,kind=host,source=/srv/tinc,readOnly=false --mount volume=tinc,target=/etc/tinc docker://jenserat/tinc --exec=/usr/sbin/tinc -- add Address = $COREOS_PUBLIC_IPV4"
         TimeoutStartSec=5m
         EnvironmentFile=/run/flannel/subnet.env
-        ExecStartPre=/bin/sh -c "/usr/bin/docker run --rm --volume /srv/tinc:/etc/tinc  jenserat/tinc add Subnet = `echo $FLANNEL_SUBNET | sed -e 's/1\\/24/0\\/24/'`"
-        ExecStartPre=/bin/sh -c "/usr/bin/docker run --rm --volume /srv/tinc:/etc/tinc  jenserat/tinc add Mode = switch"
-        ExecStartPre=/bin/sh -c "/usr/bin/docker run --rm --volume /srv/tinc:/etc/tinc  jenserat/tinc add DeviceType = tap"
+        ExecStartPre=/bin/sh -c "/usr/bin/rkt run --volume tinc,kind=host,source=/srv/tinc,readOnly=false --mount volume=tinc,target=/etc/tinc docker://jenserat/tinc --exec=/usr/sbin/tinc -- add Subnet = `echo $FLANNEL_SUBNET | sed -e 's/1\\/24/0\\/24/'`"
+        ExecStartPre=/bin/sh -c "/usr/bin/rkt run --volume tinc,kind=host,source=/srv/tinc,readOnly=false --mount volume=tinc,target=/etc/tinc docker://jenserat/tinc --exec=/usr/sbin/tinc -- add Mode = switch"
+        ExecStartPre=/bin/sh -c "/usr/bin/rkt run --volume tinc,kind=host,source=/srv/tinc,readOnly=false --mount volume=tinc,target=/etc/tinc docker://jenserat/tinc --exec=/usr/sbin/tinc -- add DeviceType = tap"
         #ExecStartPre=-/usr/bin/docker rm -f tinc 
         ExecStartPre=-/usr/bin/rkt stop --uuid-file=/srv/tinc/tinc.uuid
-        ExecStartPre=/usr/bin/rkt  --uuid-file=/srv/tinc/tinc.uuid  --volume tinc,kind=host,source=/srv/tinc,readOnly=false --mount volume=tinc,target=/etc/tinc \
+        ExecStartPre=/usr/bin/rkt run --uuid-file-save=/srv/tinc/tinc.uuid  --volume tinc,kind=host,source=/srv/tinc,readOnly=false --mount volume=tinc,target=/etc/tinc \
                      --volume tun,kind=host,source=/dev/net/tun,readOnly=false --mount volume=tun,target=/dev/net/tun \
-                     --insecure-options=image jenserat/tinc 
-                      jenserat/tinc  --caps-retain=CAP_NET_ADMIN start  -D
+                     --insecure-options=image docker://jenserat/tinc \
+                     --caps-retain=CAP_NET_ADMIN,CAP_NET_BIND_SERVICE,CAP_SETGID,CAP_SETUID --exec=/usr/sbin/tinc  -- start -D
         #ExecStartPre=/usr/bin/docker run --name tinc  -d --volume /srv/tinc:/etc/tinc --net=host --device=/dev/net/tun --cap-add NET_ADMIN jenserat/tinc start  -D
 
         ExecStart=/bin/sh -c "while true; do etcdctl set /services/tinc/$TINC_HOSTNAME  \"\\\"` cat /srv/tinc/hosts/$TINC_HOSTNAME `\"\\\" --ttl 60;sleep 45;done"
