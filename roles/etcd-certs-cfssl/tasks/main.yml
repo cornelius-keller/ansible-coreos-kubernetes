@@ -1,6 +1,7 @@
 ---
 # etcd-ca export --insecure --passphrase '' | sed -e 's/.*-----BEGIN\(.*\)/-----BEGIN\1/' | openssl pkey -out key.pem
 # etcd-ca export --insecure --passphrase '' | sed -e 's/.*-----BEGIN\(.*\)/-----BEGIN\1/' | openssl x509  -out caextracted.pem
+- include: install-cfssl.yml
 
 - block:
   - name: create etcd-cfssl ca authoritority

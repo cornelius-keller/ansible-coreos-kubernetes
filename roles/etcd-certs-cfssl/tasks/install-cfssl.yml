@@ -1,0 +1,29 @@
+---
+- name: detect local installation of cfssl
+  local_action: "command which cfssl"
+  register: local_cfssl
+  become: false
+  ignore_errors: yes
+  run_once: true
+
+- name: ensure ~/bin directory exists
+  local_action: "file path=~/bin state=directory"
+  when: local_cfssl.rc != 0
+  become: false
+  run_once: true
+
+- name: Detect local OS
+  local_action: "command sh -c \"uname | tr '[:upper:]' '[:lower:]'\""
+  become: false
+  register: os
+  when: local_cfssl.rc != 0
+  run_once: true
+
+- name: download binaries
+  local_action: "get_url url='https://pkg.cfssl.org/R1.2/{{ item }}_{{os.stdout}}-amd64' dest='~/bin/{{ item }}' mode='0744'"
+  become: false
+  with_items:
+    - cfssl
+    - cfssljson
+  when: local_cfssl.rc != 0
+  run_once: true
