@@ -34,6 +34,20 @@ write_files:
       /usr/bin/rm -rf /etc/systemd/system/*
       /usr/bin/rm -rf /etc/kubernetes/manifests
       /usr/bin/echo "cleanup done"
+  - path: /opt/bin/k8s_healthy
+    permissions: '0775'
+    content: |
+      #!/bin/bash
+      ready=0
+      for line in $(/usr/bin/docker run --rm --net=host -v /etc/kubernetes/ssl/:/etc/kubernetes/ssl/ {{ hyperkube_aci }}:{{ hyperkube_aci_tag }} \
+      /hyperkube kubectl --client-key=/etc/kubernetes/ssl/worker-key.pem --client-certificate=/etc/kubernetes/ssl/worker.pem \
+      --server=https://127.0.0.1:8888 --certificate-authority=/etc/kubernetes/ssl/ca.pem get nodes  | sed -e 1,1d); do
+      echo $line | egrep -qE "NotReady|SchedulingDisabled"
+      if [ $? == 0 ]; then 
+        ready=$(($ready + 1 ))
+      fi
+      done
+      exit $ready
 
   - path: /opt/bin/check-cordon
     permissions: '0775'
@@ -378,10 +392,15 @@ write_files:
       if locksmithctl lock || locksmithctl status | grep `cat /etc/machine-id`; then
         rebootflag='NEED_REBOOT'
         if update_engine_client -status | grep $rebootflag || etcdctl get  /needsreboot/$( cat /etc/machine-id); then
-          if /opt/bin/ceph  health | grep HEALTH_OK && /opt/bin/ceph -s | grep "{{ groups['ceph-mon'] | length }} mons"; then
-            etcdctl rm /needsreboot/$( cat /etc/machine-id) || true;
-            echo "all checks for update window passed; rebooting now";
-            reboot;
+          if /opt/bin/ceph  health | grep HEALTH_OK && /opt/bin/k8s_healthy; then
+            if  ! etcdctl get /rebootlock;  then
+              etcdctl rm /needsreboot/$( cat /etc/machine-id) || true;
+              etcdctl set /rebootlock "Reboot  machines locked for 1h" --ttl 3600
+              echo "all checks for update window passed; rebooting now";
+              reboot;
+            else
+              echo "reboot is locked"
+            fi
           else
             echo "reboot needed but ceph is not health; delay reboot"
             locksmithctl unlock;
