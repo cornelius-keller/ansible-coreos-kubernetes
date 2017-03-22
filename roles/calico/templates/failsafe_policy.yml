@@ -24,6 +24,16 @@
     - action: allow
       protocol: tcp
       destination:
+        ports: 
+        - 655
+    - action: allow
+      protocol: udp
+      destination:
+        ports: 
+        - 655
+    - action: allow
+      protocol: tcp
+      destination:
         ports: [80,443]
     egress:
     - action: allow
@@ -43,5 +53,14 @@
       destination:
         ports: [80,443]
     - action: allow
-    - action: allow
       protocol: icmp
+    - action: allow
+      protocol: tcp
+      destination:
+        ports: 
+        - 655
+    - action: allow
+      protocol: udp
+      destination:
+        ports: 
+        - 655
