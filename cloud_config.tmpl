@@ -48,6 +48,11 @@ write_files:
       fi
       done
       exit $ready
+  - path: /srv/tinc/tinc-up
+    permissions: '0775'
+    content: |
+      #!/bin/sh
+      brctl addif docker0 tap0 || true
 
   - path: /opt/bin/check-cordon
     permissions: '0775'
@@ -519,7 +524,7 @@ write_files:
             current_value="$( cat /srv/tinc/hosts/$host )"
           fi
           if [ "$ETCD_WATCH_VALUE" != "\"$current_value\"" ]; then
-            /usr/bin/rkt run --volume tinc,kind=host,source=/srv/tinc,readOnly=false --mount volume=tinc,target=/etc/tinc docker://jenserat/tinc --exec=/usr/sbin/tinc -- add ConnectTo = $host
+            rkt enter $(cat /srv/tinc/tinc.uuid )  /usr/sbin/tinc  add ConnectTo = $host
             #etcdctl get /services/tinc/$host | sed -e 's/\"//g' > /srv/tinc/hosts/$host
             echo  "$ETCD_WATCH_VALUE" | sed -e 's/\"//g' > /srv/tinc/hosts/$host
             rkt enter $(cat /srv/tinc/tinc.uuid )  /usr/sbin/tinc reload
@@ -531,7 +536,7 @@ write_files:
         fi
         if [ "$ETCD_WATCH_ACTION" = "delete" ] || [ "$ETCD_WATCH_ACTION" = "expire" ]; then
           echo "removing tinc host $host"
-          /usr/bin/rkt run  --volume tinc,kind=host,source=/srv/tinc,readOnly=false --mount volume=tinc,target=/etc/tinc docker://jenserat/tinc --exec=/usr/sbin/tinc -- del ConnectTo = $host
+          rkt enter $(cat /srv/tinc/tinc.uuid )  /usr/sbin/tinc del ConnectTo = $host
           rm -f /srv/tinc/hosts/$host
           rkt enter $(cat /srv/tinc/tinc.uuid )  /usr/sbin/tinc reload
           echo "done"
@@ -712,7 +717,6 @@ coreos:
         Address={{ ip }}
 {% endfor %}
 {% endif  %}
-
 
     #To use etcd2, comment out the above service and uncomment these
     # Note: this requires a release that contains etcd2
@@ -1041,13 +1045,15 @@ coreos:
         Description=Tinc VPN Service
         Requires=flannel-wait.service
         After=flanneld.service tinc-env.service flannel-wait.service 
-        Before=kubernetes-networking.target tinc-config-updater.service
+        Before=kubernetes-networking.target tinc-config-updater.service tinc-sidekick.service docker-bridge.service
+        Wants=tinc-config-updater.service tinc-sidekick.service docker-bridge.service
 
         [Install]
         WantedBy=kubernetes-networking.target
 
         [Service]
         #Environment="DOCKER_HOST=unix:///var/run/early-docker.sock"
+        Restart=always
 
         EnvironmentFile=/etc/tinc-env
         EnvironmentFile=/etc/environment
@@ -1075,6 +1081,12 @@ coreos:
 
 
         #ExecStop=/usr/bin/docker rm -f tinc
+        #ExecStartPost=/bin/sh -c "while ! ifconfig -s | grep -q tap0 ; do  sleep 1; done"
+        #ExecStartPost=/bin/sh -c "while ! ifconfig -s | grep -q docker0 ; do  sleep 1; done"
+        #ExecStartPost=-/bin/sh -c "route add -net 10.1.0.0 netmask 255.255.0.0 dev docker0"
+        #ExecStartPost=/bin/sh -c "brctl addif docker0 tap0"
+        #ExecStartPost=/bin/sh -c "while ! ifconfig -s | grep -q docker0 ; do  sleep 1; done"
+        #ExecStartPost=-/usr/sbin/brctl addif docker0 tap0
         ExecStop=-/usr/bin/rkt stop --uuid-file=/srv/tinc/tinc.uuid
 
 
@@ -1085,11 +1097,12 @@ coreos:
       content: |
         [Unit]
         Description=Tinc VPN Service
-        BoundTo=tinc.service
+        BindsTo=tinc.service
         After=tinc.service
         Before=kubernetes-networking.target tinc-config-updater.service
 
         [Service]
+        Restart=always
         EnvironmentFile=/etc/tinc-env
         EnvironmentFile=/etc/environment
         ExecStart=/bin/sh -c "while true; do etcdctl set /services/tinc/$TINC_HOSTNAME  \"\\\"` cat /srv/tinc/hosts/$TINC_HOSTNAME `\"\\\" --ttl 60;sleep 45;done"
@@ -1106,14 +1119,13 @@ coreos:
         After=tinc.service tinc-sidekick.service
         Requires=tinc-sidekick.service
         Before=kubernetes-networking.target
-        Restart=always
+        BindsTo=tinc.service
 
         [Install]
         WantedBy=kubernetes-networking.target
         
         [Service]
         Restart=always
-        RestartSec=10
         EnvironmentFile=/etc/environment
         ExecStartPre=/srv/tinc_initial_config.sh
         ExecStart=/usr/bin/etcdctl exec-watch --recursive /services/tinc -- /srv/tinc_conf_updater.sh
@@ -1145,15 +1157,17 @@ coreos:
       content: |
         [Unit]
         Description=Configure Docker Bridge
-        Requires=docker.service
+        Requires=tinc.service
+        After=tinc.service
+        BindsTo=tinc.service
         #After=docker.socket
         [Service]
-        Type=oneshot
+        RemainAfterExit=true
+        Restart=always
         #ExecStartPre=-/bin/sh -c "route del -net 10.1.0.0 netmask 255.255.0.0 dev tap0"
         ExecStartPre=/bin/sh -c "while ! ifconfig -s | grep -q tap0 ; do  sleep 1; done"
         ExecStartPre=/bin/sh -c "while ! ifconfig -s | grep -q docker0 ; do  sleep 1; done"
-        ExecStartPre=/bin/sh -c "route add -net 10.1.0.0 netmask 255.255.0.0 dev docker0"
-        #ExecStartPre=-/bin/sh -c "brctl delif docker0 tap0"
+        ExecStartPre=-/bin/sh -c "route add -net 10.1.0.0 netmask 255.255.0.0 dev docker0"
         ExecStart=/bin/sh -c "brctl addif docker0 tap0"
 
     - name: fleet.service
