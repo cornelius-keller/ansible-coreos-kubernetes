@@ -8,8 +8,14 @@
     ingress:
     - action: allow
       protocol: tcp
+      source:
+        selector: "role == 'node'"
       destination:
-        ports: [22]
+        ports: 
+        - 10250
+        - 9100
+        - 4191
+    egress:
     - action: allow
       protocol: tcp
       source:

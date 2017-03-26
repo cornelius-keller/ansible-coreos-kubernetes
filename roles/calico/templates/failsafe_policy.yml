@@ -39,7 +39,7 @@
     - action: allow
       protocol: tcp
       destination:
-        ports: [2379, 2380]
+        ports: [2379, 2380, 4001]
     - action: allow
       protocol: udp
       destination:
@@ -64,3 +64,8 @@
       destination:
         ports: 
         - 655
+    - action: allow
+      protocol: tcp
+      destination:
+        ports: 
+        - 6443
