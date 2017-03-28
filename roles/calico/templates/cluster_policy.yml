@@ -25,3 +25,12 @@
         - 10250
         - 9100
         - 4191
+    - action: allow
+      protocol: tcp
+      source:
+        net: "10.1.0.0/16"
+      destination:
+        ports: 
+        - 10250
+        - 9100
+        - 4191
