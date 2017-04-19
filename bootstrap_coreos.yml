@@ -37,12 +37,12 @@
         wait_for:
           host: "{{ inventory_hostname }}"
           port: 6443
-          timeout: 600
+          timeout: 900
   roles:
     - role: kubectl
     - role: kubectl-config
     - role: k8s-kubesystem-namespace
-    - role: calico
     - { role: k8s-dns-addon   }
     - { role: ceph-on-kubernetes-resources, ansible_ssh_user: core, ansible_python_interpreter: /home/core/pypy/bin/python   }
+    - role: calico
 #   - role: loadbalancer
