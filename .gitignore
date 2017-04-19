@@ -3,3 +3,7 @@
 *-ceph/
 *-loadbalancer/
 *.ini
+.vagrant
+!inventory-vagrant.ini
+vagrant-*
+*.retry

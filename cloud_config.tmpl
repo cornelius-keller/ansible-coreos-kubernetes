@@ -2,9 +2,10 @@
 
 hostname: {{ coreos_hostname }}
 ssh_authorized_keys:
-  {% for key in coreos_public_keys %}
+  - "{{  lookup('file', '~/.ssh/id_rsa.pub') }}"
+{% for key in coreos_public_keys %}
   - {{ key }}
-  {% endfor %}
+{% endfor %}
 
 write_files:
   - path: /opt/bin/ceph
@@ -527,7 +528,8 @@ write_files:
             rkt enter $(cat /srv/tinc/tinc.uuid )  /usr/sbin/tinc  add ConnectTo = $host
             #etcdctl get /services/tinc/$host | sed -e 's/\"//g' > /srv/tinc/hosts/$host
             echo  "$ETCD_WATCH_VALUE" | sed -e 's/\"//g' > /srv/tinc/hosts/$host
-            rkt enter $(cat /srv/tinc/tinc.uuid )  /usr/sbin/tinc reload
+            rkt enter $(cat /srv/tinc/tinc.uuid )  /usr/sbin/tinc reload \
+            || rkt enter $(cat /srv/tinc/tinc.uuid )  /usr/sbin/tinc stop 
             #docker exec tinc /usr/sbin/tinc reload
             echo "done"
           else
@@ -538,7 +540,8 @@ write_files:
           echo "removing tinc host $host"
           rkt enter $(cat /srv/tinc/tinc.uuid )  /usr/sbin/tinc del ConnectTo = $host
           rm -f /srv/tinc/hosts/$host
-          rkt enter $(cat /srv/tinc/tinc.uuid )  /usr/sbin/tinc reload
+          rkt enter $(cat /srv/tinc/tinc.uuid )  /usr/sbin/tinc reload \
+          || rkt enter $(cat /srv/tinc/tinc.uuid )  /usr/sbin/tinc stop 
           echo "done"
         fi
       fi
@@ -662,12 +665,20 @@ coreos:
     - name: etcd2.service
       command: start
       drop-ins:
+{% if baremetal_provider != 'vagrant' %}
         - name: 50-network-wait.conf
           content: |
             [Unit]
             Requires=systemd-networkd-wait-online.service
             After=systemd-networkd-wait-online.service setup-subnet-routes.service
             Requires=setup-subnet-routes.service
+{% else  %}
+        - name: 50-network-wait.conf
+          content: |
+            [Unit]
+            Requires=systemd-networkd-wait-online.service
+            After=systemd-networkd-wait-online.service
+{% endif %}
         - name: 30-certificates.conf
           content: |
             [Service]
@@ -702,7 +713,18 @@ coreos:
             After=flanneld.service
             [Service]
             EnvironmentFile=/run/flannel/flannel_docker_opts.env
-
+{% if baremetal_provider == 'vagrant' %}
+    - name: 00-wired.network
+      runtime: true
+      content: |
+        [Match]
+        Name=eth1
+        [Network]
+        DHCP=ipv4
+        DNS=127.0.0.1
+        DNS=8.8.8.8
+        Domains=
+{% else %}
     - name: 00-wired.network
       runtime: true
       content: |
@@ -712,11 +734,26 @@ coreos:
         DHCP=ipv4
         DNS=127.0.0.1
         Domains=
+{% endif %}
 {% if hetzner_failover_ips is defined %}
 {% for ip in hetzner_failover_ips %}
         Address={{ ip }}
 {% endfor %}
 {% endif  %}
+
+{% if baremetal_provider == 'vagrant' %}
+    - name: vagrant_dns.service
+      command: start
+      content: |
+        [Unit]
+        Description=Setup Network Environment
+        Requires=network-online.target
+        After=network-online.target
+        [Service]
+        ExecStart=/usr/bin/sed -i '/10.0.2.3/d' /etc/resolv.conf
+        RemainAfterExit=yes
+        Type=oneshot
+{% endif %}
 
     #To use etcd2, comment out the above service and uncomment these
     # Note: this requires a release that contains etcd2
@@ -759,6 +796,7 @@ coreos:
         --secure-port=6443 \
         --runtime-config=extensions/v1beta1/daemonsets=true \
         --service-cluster-ip-range={{ k8s_service_ip_range }} \
+        --anonymous-auth=false \
         #--token-auth-file=/srv/kubernetes/known_tokens.csv \
         #--basic-auth-file=/srv/kubernetes/basic_auth.csv \
         #--etcd-servers=http://127.0.0.1:2379 \
@@ -835,6 +873,7 @@ coreos:
         ExecStart=/opt/bin/setup-network-environment
         RemainAfterExit=yes
         Type=oneshot
+{% if baremetal_provider != 'vagrant' %}
     - name: setup-subnet-routes.service
       command: start
       content: |
@@ -844,10 +883,12 @@ coreos:
         After=network-online.target
         Before=etcd2.service
         [Service]
+        TimeoutStartSec=10m
         ExecStartPre=/usr/bin/rkt fetch --insecure-options=image docker://quay.io/cornelius/hetner-netconf
         ExecStart=/usr/bin/rkt run  --trust-keys-from-https --net=host  quay.io/cornelius/hetner-netconf --caps-retain=CAP_NET_ADMIN
         RemainAfterExit=yes
         Type=oneshot
+{% endif %}
     - name: kube-proxy.service
       enable: true
       command: start
@@ -863,7 +904,7 @@ coreos:
         WantedBy=kubernetes-networking.target
 
         [Service]
-        TimeoutStartSec=5m
+        TimeoutStartSec=10m
         Environment=KUBELET_VERSION={{ hyperkube_aci_tag }}
         Environment=KUBELET_ACI={{ hyperkube_aci }}
         ExecStartPre=/usr/bin/docker pull {{ hyperkube_aci }}:{{ hyperkube_aci_tag }}
@@ -893,7 +934,8 @@ coreos:
         ExecStartPre=/usr/bin/mkdir -p /etc/kubernetes/manifests
         ExecStartPre=/usr/bin/mkdir -p /var/log/containers
         ExecStartPre=/usr/bin/docker pull ceph/base
-        TimeoutStopSec=180s
+        TimeoutStopSec=900s
+        TimeoutStartSec=10m
 
         Environment=KUBELET_VERSION={{ hyperkube_aci_tag }}
         Environment=KUBELET_ACI={{ hyperkube_aci }}
@@ -956,7 +998,7 @@ coreos:
       content: |
         [Unit]
         Description=Tinc Service
-        After=etcd.service etcd2.servic flanneld.service
+        After=etcd.service etcd2.service flanneld.service
         Before=fleet.service
         
         [Service]
@@ -1028,7 +1070,8 @@ coreos:
           --listen-address=127.0.0.1 \
           --server=/cluster.local/{{ k8s_dns_service_ip }} \
           --rev-server={{ k8s_service_ip_range }},{{ k8s_dns_service_ip }} \
-          --rev-server=10.1.0.0/16,{{ k8s_dns_service_ip }}
+          --rev-server=10.1.0.0/16,{{ k8s_dns_service_ip }} \
+          --server=8.8.8.8
 
         #ExecStop=/usr/bin/sleep 50
         ExecStopPost=/usr/bin/docker rm -f dnsmask
@@ -1126,6 +1169,7 @@ coreos:
         
         [Service]
         Restart=always
+        RestartSec=1
         EnvironmentFile=/etc/environment
         ExecStartPre=/srv/tinc_initial_config.sh
         ExecStart=/usr/bin/etcdctl exec-watch --recursive /services/tinc -- /srv/tinc_conf_updater.sh
@@ -1179,10 +1223,10 @@ coreos:
         [Unit]
         Description=Cleanup directories populated by cloudconfig to avoid configuration drift
         Before=network.target
-        RequiredBy=kube-kubelet.service
 
         [Install]
         WantedBy=kubernetes-networking.target
+        RequiredBy=kube-kubelet.service
 
 
         [Service]

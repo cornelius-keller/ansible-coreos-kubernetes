@@ -1,6 +1,14 @@
 ---
 - name: copy cloud config
+  file: path=/var/lib/coreos-install state=directory
+  sudo: yes
+- name: copy cloud config
   template: src=cloud_config.tmpl dest=/var/lib/coreos-install/user_data
+  sudo: yes
+
+- name: remove /usr/share/oem/cloud-config.yml on vagrant
+  file: path=/usr/share/oem/cloud-config.yml state=absent
+  when: baremetal_provider == 'vagrant'
   sudo: yes
 
 - name: stop etcd.service
