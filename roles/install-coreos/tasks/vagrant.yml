@@ -1,0 +1,24 @@
+---
+- name: destroy previous vagrant instances
+  shell: |
+      cd {{ playbook_dir }}
+      vagrant destroy -f 
+  delegate_to: localhost
+  connection: local
+  run_once: true
+- name: boot vagrant vm
+  shell: |
+      cd {{ playbook_dir }}
+      vagrant up {{ coreos_hostname }}
+  delegate_to: localhost
+  connection: local
+
+- name: waiting for server to come back
+  local_action:
+    module: wait_for
+      host={{ inventory_hostname }}
+      port=22
+      delay=1
+      timeout=200
+
+
