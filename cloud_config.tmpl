@@ -490,7 +490,7 @@ write_files:
       #COREOS_PRIVATE_IPV4=172.17.8.101
       ETCDCTL_CERT_FILE=/etc/ssl/etcd/key.crt
       ETCDCTL_CA_FILE=/etc/ssl/etcd/ca.crt
-      ETCDCTL_PEERS=https://{{ inventory_hostname }}:4001
+      ETCDCTL_PEERS="{% for host in groups['etcd-node'] %}https://{{host}}:2379{%if not loop.last %},{% endif %}{% endfor %}"
       ETCDCTL_KEY_FILE=/etc/ssl/etcd/key.key
       LOCKSMITHCTL_ETCD_CERTFILE=/etc/ssl/etcd/key.crt
       LOCKSMITHCTL_ETCD_CAFILE=/etc/ssl/etcd/ca.crt
@@ -791,7 +791,7 @@ coreos:
         --etcd-cafile=/etc/ssl/etcd/ca.crt \
         --etcd-certfile=/etc/ssl/etcd/key.crt \
         --etcd-keyfile=/etc/ssl/etcd/key.key \
-        --etcd-servers=https://{{ inventory_hostname }}:2379 \
+        --etcd-servers="{% for host in groups['etcd-node'] %}https://{{host}}:2379{%if not loop.last %},{% endif %}{% endfor %}" \
         --kubelet-https=true \
         --secure-port=6443 \
         --runtime-config=extensions/v1beta1/daemonsets=true \
