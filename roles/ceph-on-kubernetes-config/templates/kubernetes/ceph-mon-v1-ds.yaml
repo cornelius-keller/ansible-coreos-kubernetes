@@ -32,6 +32,9 @@ spec:
         - name: ceph-bootstrap-rgw-keyring
           secret:
             secretName: ceph-bootstrap-rgw-keyring
+        - name: mon-directory
+          hostPath:
+              path:  /home/core/data/ceph/mon
       containers:
         - name: ceph-mon
           image: quay.io/cornelius/ceph-daemon-test:latest
@@ -58,6 +61,11 @@ spec:
               value: "1"
             - name: CLUSTER
               value: ceph
+            - name: MON_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+
           volumeMounts:
             - name: ceph-conf
               mountPath: /etc/ceph
@@ -67,6 +75,8 @@ spec:
               mountPath: /var/lib/ceph/bootstrap-mds
             - name: ceph-bootstrap-rgw-keyring
               mountPath: /var/lib/ceph/bootstrap-rgw
+            - name: mon-directory
+              mountPath: /var/lib/ceph/mon
           livenessProbe:
               tcpSocket:
                 port: 6789
