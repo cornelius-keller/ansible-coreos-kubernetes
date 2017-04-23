@@ -1,5 +1,6 @@
 ---
 clear_etcd_data: false
+etcd_version: '2'
 cluster_only_ports:
     - 4194
     - 9100

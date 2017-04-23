@@ -604,6 +604,7 @@ coreos:
     #peer-addr: {{ inventory_hostname }}:7001
   update:
     reboot-strategy: off
+{% if etcd_version == '2' %}
   etcd2:
     # generate a new token for each unique cluster from https://discovery.etcd.io/new?size=3
     #discovery: "{# etcd_discovery_url #}"
@@ -625,7 +626,7 @@ coreos:
     # listen on both the official ports and the legacy ports
     # legacy ports can be omitted if your application doesn't depend on them
     listen-client-urls: "https://0.0.0.0:2379,https://0.0.0.0:4001"
-
+{% endif %}
   fleet:
     public-ip: {{ inventory_hostname }}
     #  metadata: role={# coreos_role #}
@@ -641,27 +642,9 @@ coreos:
   flannel:
     interface: {{ inventory_hostname }}
   units:
-    - name: locksmithd.service
-      command: stop
-    - name: update-window.service
-      runtime: true
-      content: |
-        [Unit]
-        Description=Reboot if an update has been downloaded
 
-        [Service]
-        EnvironmentFile=/etc/environment
-        ExecStart=/opt/bin/update-window.sh 
-    - name: update-window.timer
-      runtime: true
-      command: start
-      content: |
-        [Unit]
-        Description=Reboot timer
 
-        [Timer]
-        OnCalendar=*:0/5
-
+{% if etcd_version == '2' %}
     - name: etcd2.service
       command: start
       drop-ins:
@@ -690,6 +673,82 @@ coreos:
             Environment=ETCD_PEER_CA_FILE=/etc/ssl/etcd/ca.crt
             Environment=ETCD_PEER_CERT_FILE=/etc/ssl/etcd/key.crt
             Environment=ETCD_PEER_KEY_FILE=/etc/ssl/etcd/key.key
+{% else %}
+
+
+    - name: etcd3.service
+      command: start
+      enable: true
+      content: |
+        [Unit]
+        Description=etcd
+        Documentation=https://github.com/coreos/etcd
+        Conflicts=etcd.service
+        Conflicts=etcd2.service
+{% if baremetal_provider != 'vagrant' %}
+        Requires=systemd-networkd-wait-online.service
+        After=systemd-networkd-wait-online.service setup-subnet-routes.service
+        Requires=setup-subnet-routes.service
+{% else  %}
+        Requires=systemd-networkd-wait-online.service
+        After=systemd-networkd-wait-online.service
+{% endif %}
+        
+        [Service]
+        Type=notify
+        Restart=always
+        RestartSec=5s
+        LimitNOFILE=40000
+        TimeoutStartSec=0
+        # Client Env Vars
+        Environment=ETCD_CA_FILE=/etc/ssl/etcd/ca.crt
+        Environment=ETCD_CERT_FILE=/etc/ssl/etcd/key.crt
+        Environment=ETCD_KEY_FILE=/etc/ssl/etcd/key.key
+        # Peer Env Vars
+        Environment=ETCD_PEER_CA_FILE=/etc/ssl/etcd/ca.crt
+        Environment=ETCD_PEER_CERT_FILE=/etc/ssl/etcd/key.crt
+        Environment=ETCD_PEER_KEY_FILE=/etc/ssl/etcd/key.key
+        # etcd version
+        Environment=ETCD_IMAGE_TAG=v3.1.6
+        # etcd user
+        Environment=ETCD_USER=root
+        Environment=ETCD_DATA_DIR=/var/lib/etcd3
+        Environment="RKT_RUN_ARGS=--volume etc-ssl-etcd,kind=host,source=/etc/ssl/etcd,readOnly=true --mount volume=etc-ssl-etcd,target=/etc/ssl/etcd"
+
+
+        ExecStart=/usr/lib64/coreos/etcd-wrapper --name {{ coreos_hostname }} \
+            --data-dir /var/lib/etcd \
+            --listen-client-urls https://{{ inventory_hostname }}:2379,https://{{ inventory_hostname }}:4001\
+            --advertise-client-urls  https://{{ inventory_hostname }}:2379 \
+            --listen-peer-urls https://{{ inventory_hostname }}:2380 \
+            --initial-advertise-peer-urls https://{{ inventory_hostname }}:2380 \
+            --initial-cluster {% for host in groups['etcd-node'] %}{{ hostvars[host]['coreos_hostname'] }}=https://{{host}}:2380{%if not loop.last %},{% endif %}{% endfor %} \
+            --initial-cluster-token my-etcd-token \
+            --initial-cluster-state new
+
+        [Install]
+        WantedBy=multi-user.target
+{% endif %}
+    - name: locksmithd.service
+      command: stop
+    - name: update-window.service
+      runtime: true
+      content: |
+        [Unit]
+        Description=Reboot if an update has been downloaded
+
+        [Service]
+        EnvironmentFile=/etc/environment
+        ExecStart=/opt/bin/update-window.sh 
+    - name: update-window.timer
+      runtime: true
+      command: start
+      content: |
+        [Unit]
+        Description=Reboot timer
+
+        [Timer]
+        OnCalendar=*:0/5
 
     - name: update_ca_certificates.service
       command: start
@@ -767,8 +826,8 @@ coreos:
         [Unit]
         Description=Kubernetes API Server
         Documentation=https://github.com/GoogleCloudPlatform/kubernetes
-        Requires=setup-network-environment.service etcd2.service
-        After=setup-network-environment.service etcd2.service kubernetes-networking.target
+        Requires=setup-network-environment.service etcd{{ etcd_version }}.service
+        After=setup-network-environment.service etcd{{ etcd_version }}.service kubernetes-networking.target
         Before=kube-kubelet.service
         [Service]
         Environment=KUBELET_VERSION={{ hyperkube_aci_tag }}
@@ -817,6 +876,7 @@ coreos:
         Environment=KUBELET_VERSION={{ hyperkube_aci_tag }}
         Environment=KUBELET_ACI={{ hyperkube_aci }}
         Environment=EXEC=controller-manager
+        Environment="RKT_OPTS=--volume=ceph,kind=host,source=/etc/ceph/ --mount volume=ceph,target=/etc/ceph/ --volume=modules,kind=host,source=/lib/modules/ --mount volume=modules,target=/lib/modules/ --volume resolv-conf,kind=host,source=/etc/resolv.conf --mount volume=resolv-conf,target=/etc/resolv.conf --volume var-log-containers,kind=host,source=/var/log/containers/ --mount volume=var-log-containers,target=/var/log/containers/"
         ExecStart=/opt/bin/hyperkube-wrapper \
         --service-account-private-key-file=/etc/kubernetes/ssl/apiserver-key.pem \
         --root-ca-file=/etc/kubernetes/ssl/ca.pem \
@@ -825,7 +885,8 @@ coreos:
         --leader-elect-lease-duration=15s \
         --leader-elect-renew-deadline=10s \
         --leader-elect-retry-period=2s \
-        --logtostderr=true
+        --logtostderr=true \
+        -v=6
         Restart=always
         RestartSec=10
     - name: kube-scheduler.service
@@ -881,7 +942,7 @@ coreos:
         Description=Setup Hetzner Subnet Routes
         Requires=network-online.target
         After=network-online.target
-        Before=etcd2.service
+        Before=etcd{{ etcd_version }}.service
         [Service]
         TimeoutStartSec=10m
         ExecStartPre=/usr/bin/rkt fetch --insecure-options=image docker://quay.io/cornelius/hetner-netconf
@@ -998,7 +1059,7 @@ coreos:
       content: |
         [Unit]
         Description=Tinc Service
-        After=etcd.service etcd2.service flanneld.service
+        After=etcd.service etcd{{ etcd_version }}.service flanneld.service
         Before=fleet.service
         
         [Service]
@@ -1012,7 +1073,7 @@ coreos:
         [Unit]
         Description=Wait For Flannel
         Requires=flanneld.service
-        After=etcd.service etcd2.service flanneld.service
+        After=etcd.service etcd{{ etcd_version }}.service flanneld.service
 
         [Service]
         Type=oneshot
@@ -1025,8 +1086,8 @@ coreos:
         [Unit]
         Description=etcd waiter
         Wants=network-online.target
-        Wants=etcd2.service
-        After=etcd2.service
+        Wants=etcd{{ etcd_version }}.service
+        After=etcd{{ etcd_version }}.service
         After=network-online.target
         Before=flanneld.service
         Before=setup-network-environment.service
@@ -1044,7 +1105,7 @@ coreos:
       content: |
         [Unit]
         Description=Tinc Configuration Service
-        After=etcd.service etcd2.service flanneld.service
+        After=etcd.service etcd{{ etcd_version }}.service flanneld.service
         Before=fleet.service
 
         [Service]
@@ -1182,8 +1243,8 @@ coreos:
         - name: 50-network-config.conf
           content: |
             [Unit]
-            Requires=etcd2.service etcd-waiter.service
-            After=etcd2.service etcd-waiter.service
+            Requires=etcd{{ etcd_version }}.service etcd-waiter.service
+            After=etcd{{ etcd_version }}.service etcd-waiter.service
             Before=docker.service
             [Service]
             EnvironmentFile=/etc/environment
