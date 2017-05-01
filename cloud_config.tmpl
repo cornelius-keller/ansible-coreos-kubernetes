@@ -528,7 +528,7 @@ write_files:
             rkt enter $(cat /srv/tinc/tinc.uuid )  /usr/sbin/tinc  add ConnectTo = $host
             #etcdctl get /services/tinc/$host | sed -e 's/\"//g' > /srv/tinc/hosts/$host
             echo  "$ETCD_WATCH_VALUE" | sed -e 's/\"//g' > /srv/tinc/hosts/$host
-            rkt enter $(cat /srv/tinc/tinc.uuid )  /usr/sbin/tinc reload \
+            rkt enter $(cat /srv/tinc/tinc.uuid )  /usr/sbin/tinc reload   \
             || rkt enter $(cat /srv/tinc/tinc.uuid )  /usr/sbin/tinc stop 
             #docker exec tinc /usr/sbin/tinc reload
             echo "done"
@@ -952,8 +952,7 @@ coreos:
           --tls-cert-file=/etc/kubernetes/ssl/worker.pem \
           --tls-private-key-file=/etc/kubernetes/ssl/worker-key.pem \
           --register-node=true \
-          --register-schedulable=true \
-          --node-status-update-frequency=2s
+          --register-schedulable=true
         ExecStartPost=-/opt/bin/uncordon-node
         ExecStop=/opt/bin/drain-node
 
